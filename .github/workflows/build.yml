@@ -1,0 +1,59 @@
+# Build the plugin on every push; on a version tag (v*), attach an
+# installable zip to a GitHub release.  The zip unpacks to a single
+# "Deckygram/" folder, which is exactly what Decky Loader expects when
+# installing from a URL or from a local file.
+
+name: build
+
+# The release step creates a GitHub release, which needs write access;
+# the default GITHUB_TOKEN is read-only unless declared here.
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Build frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Sanity-check Python
+        run: |
+          python3 -m py_compile main.py py_modules/deckygram/*.py
+
+      - name: Assemble plugin folder
+        run: |
+          mkdir -p out/Deckygram
+          cp -r dist py_modules main.py plugin.json package.json README.md LICENSE out/Deckygram/
+          find out -name __pycache__ -type d -exec rm -rf {} +
+          cd out && zip -r ../Deckygram.zip Deckygram
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Deckygram
+          path: Deckygram.zip
+
+      - name: Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" Deckygram.zip \
+            --title "Deckygram ${GITHUB_REF_NAME}" \
+            --generate-notes
