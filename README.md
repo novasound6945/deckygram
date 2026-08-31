@@ -24,7 +24,7 @@
 <td align="center"><sub>…and they arrive as an album / 앨범으로 도착!</sub></td>
 </tr></table>
 
-<sub>UI follows your Steam language — shown here in English and 한국어.</sub>
+<sub>UI follows your Steam language — 10 of them. Shown here in English and 한국어.</sub>
 
 </div>
 
@@ -141,7 +141,11 @@ nowhere near the limit.</sub>
   **downloads the ZIP onto the Deck** (into `~/Downloads`), so updating is
   just Decky → Developer → Install plugin from ZIP file, then a restart —
   no browsing to a download page in Game Mode.
-- UI follows your Steam language (English / 한국어 today — PRs welcome).
+- **UI follows your Steam language**, no setting to change: English,
+  한국어, Deutsch, Français, Русский, Português (BR), Polski, Türkçe,
+  简体中文 and 繁體中文. Anything else falls back to English. Corrections
+  from native speakers are very welcome — every string lives in
+  [`src/i18n.ts`](src/i18n.ts), one object per language.
 
 ### 🔧 Troubleshooting
 
@@ -268,7 +272,11 @@ Nitro가 아니라 **서버** 기준). 그래서 클립을 더 세게 압축하�
   내려받습니다**(`~/Downloads`). 그다음 Decky → 개발자 → ZIP 파일에서
   플러그인 설치로 고르고 재시작하면 끝입니다 — 게임 모드 브라우저로
   다운로드 페이지를 헤맬 필요가 없습니다.
-- UI는 스팀 언어를 따라갑니다 (현재 영어/한국어 — 번역 PR 환영).
+- **UI는 스팀 언어를 그대로 따라갑니다** — 따로 설정할 것이 없습니다.
+  영어, 한국어, 독일어, 프랑스어, 러시아어, 포르투갈어(브라질), 폴란드어,
+  터키어, 중국어 간체·번체를 지원하며 그 외 언어는 영어로 표시됩니다.
+  모든 문구는 [`src/i18n.ts`](src/i18n.ts) 한 파일에 언어별 객체로
+  들어 있습니다 — 원어민의 수정 PR을 환영합니다.
 
 ### 🔧 문제 해결
 

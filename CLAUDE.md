@@ -28,11 +28,14 @@ reaches the public repo:
    no private email addresses beyond the intended public one.
 3. Secrets live only in Decky's settings dir on the device (mode 600),
    never in this repo — keep it that way.
-3-1. **No Claude session URLs in commit messages.** `Co-Authored-By:
-   Claude ...` is welcome; `Claude-Session: https://claude.ai/...`
-   trailers are NOT — they point at a private working conversation and
-   do not belong in public history. (Removed from all history on
-   2026-08-31; keep it out.)
+3-1. **No Claude trailers in commit messages at all.** Neither
+   `Co-Authored-By: Claude ...` nor `Claude-Session: https://claude.ai/...`
+   belongs in this history. The session URL points at a private working
+   conversation. The co-author trailer is parsed by GitHub, which then
+   shows Claude on the commit and in the repository's contributor list —
+   the owner does not want that, and attribution already lives where it
+   was chosen: the credit line at the bottom of README.md. (Both removed
+   from all history on 2026-08-31; keep them out.)
 4. If something sensitive ever lands in history: rewrite history
    (filter-repo) and rotate the leaked credential **before** pushing.
 
@@ -67,10 +70,22 @@ reaches the public repo:
 - Run locally (this PC has no Python):
   `docker run --rm -v C:\deckygram:/w -w /w python:3.12-alpine python -m unittest discover -s tests -t .`
 
-## Update-checker lifecycle
+## Distribution: GitHub only, permanently
 
-- Our own GitHub release check exists ONLY because ZIP installs have no
-  update channel. Decky's updater matches installed plugins against the
-  STORE list **by name** (`store.tsx: checkForPluginUpdates`), so once
-  Deckygram is in the official store, even ZIP-sideloaded installs get
-  store update offers — remove `updates.py` and the panel row then.
+The Decky store will not take this plugin. Its submission policy states,
+under *"AI", LLMs and so on*: **"We do not accept any plugin that uses
+any LLM based code… Any LLM focused plugins will be rejected outright and
+there will be no appeals."** The stated reason is GPL-licence and
+attribution concerns about model training data, so it targets
+LLM-*written* code, not just plugins that call an LLM at runtime.
+Deckygram is written with Claude and says so in the README. Removing that
+credit to slip past the rule is not on the table.
+
+Consequences for anyone working here:
+
+- `updates.py` and the panel's update button are **permanent core
+  features**, not a stopgap until store listing. They are the only update
+  path users get, so treat regressions there as serious.
+- The install story is the README's URL/ZIP flow. Keep the Decky-restart
+  warning prominent; it is the most common failure report.
+- Do not spend effort on store-submission prerequisites.

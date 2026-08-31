@@ -2,6 +2,53 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.4.0
+
+### Added / 추가
+- **Eight more UI languages**, bringing the total to ten: Deutsch,
+  Français, Русский, Português (BR), Polski, Türkçe, 简体中文 and 繁體中文,
+  alongside English and 한국어. There is nothing to switch on — the panel
+  and the gallery follow your Steam language, and anything not on the list
+  still falls back to English.
+  **UI 언어 8종 추가** — 기존 영어·한국어에 독일어, 프랑스어, 러시아어,
+  포르투갈어(브라질), 폴란드어, 터키어, 중국어 간체·번체가 더해져 총
+  10개 언어를 지원합니다. 설정할 것은 없습니다. 패널과 갤러리가 스팀
+  언어를 그대로 따라가며, 목록에 없는 언어는 영어로 표시됩니다.
+
+  Most Steam Decks are not in English-speaking hands: after the US, UK and
+  Canada, the largest populations are in China, Russia, Germany, Brazil,
+  Poland, Turkey and France. Every one of them was reading a plugin in a
+  language they had not chosen.
+  스팀덱 사용자의 다수는 영어권이 아닙니다. 미국·영국·캐나다 다음으로
+  큰 시장이 중국, 러시아, 독일, 브라질, 폴란드, 터키, 프랑스인데, 이들
+  모두가 자신이 고르지 않은 언어로 플러그인을 보고 있었습니다.
+
+  Simplified and Traditional Chinese are separate translations rather than
+  one converted at runtime, because the terminology differs beyond the
+  script — a token is 令牌 in one and 權杖 in the other.
+  중국어는 간체·번체를 각각 번역했습니다. 글자만 다른 것이 아니라 용어가
+  달라서입니다 — token이 한쪽은 令牌, 다른 쪽은 權杖입니다.
+
+### Fixed / 수정
+- Locale matching accepts both the tags Steam reports (`pt-BR`) and its own
+  language names (`brazilian`), and normalises `zh_TW` to `zh-TW`. Full
+  tags are matched before the bare language, so Traditional Chinese no
+  longer collapses into Simplified.
+  스팀이 보고하는 태그(`pt-BR`)와 자체 명칭(`brazilian`)을 모두 인식하고
+  `zh_TW` 같은 표기도 정규화합니다. 전체 태그를 먼저 대조하므로 중국어
+  번체가 간체로 잘못 빠지지 않습니다.
+
+### Internal / 내부
+- Translations are covered by tests: every dictionary must carry exactly
+  the English key set and the same `{placeholders}` per key. With ten
+  languages, a missing key is invisible to us and shows up only as stray
+  English on someone else's Deck, and a translated placeholder renders as
+  a literal `{n}`.
+  번역을 테스트로 강제합니다. 모든 사전이 영어와 키 집합·플레이스홀더가
+  정확히 일치해야 합니다. 언어가 10개가 되면 키 누락은 우리 화면에
+  보이지 않고 남의 기기에서만 영어로 새어 나오며, 플레이스홀더를 같이
+  번역하면 화면에 `{n}`이 그대로 찍힙니다.
+
 ## v0.3.1
 
 ### Changed / 변경

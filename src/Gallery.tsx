@@ -6,7 +6,7 @@ import {
   GamepadButton,
 } from "@decky/ui";
 import { callable, toaster } from "@decky/api";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "./i18n";
 
 // ---- backend ---------------------------------------------------------------
@@ -219,6 +219,20 @@ export function GalleryPage() {
   const [page, setPage] = useState<Page | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+
+  /** Navigating here leaves focus behind in the panel that opened us, so
+      the first stick input goes nowhere useful. Put it on the first tile
+      once the page has rendered - which is also the right place after a
+      page turn or a filter change. */
+  useEffect(() => {
+    if (!page?.items.length) return;
+    const id = setTimeout(() => {
+      const first = gridRef.current?.querySelector<HTMLElement>(".dg-tile");
+      first?.focus();
+    }, 60);
+    return () => clearTimeout(id);
+  }, [page]);
 
   const load = (off: number, k = kind, refresh = false, app = appids) => {
     setPage(null);
@@ -429,6 +443,8 @@ export function GalleryPage() {
         // one would mean travelling past every tile. The footer legend
         // advertises it as soon as something is picked.
         <Focusable
+          ref={gridRef}
+          preferredFocus
           flow-children="grid"
           onSecondaryButton={() => { if (picked.size) void send(); }}
           onSecondaryActionDescription={
