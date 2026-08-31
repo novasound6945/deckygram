@@ -34,7 +34,7 @@
 
 ### 📦 Install (ZIP)
 
-1. Download **`Deckygram.zip`** from the [**latest release**](https://github.com/novasound6945/deckygram/releases/latest).
+1. Download **`Deckygram-vX.Y.Z.zip`** from the [**latest release**](https://github.com/novasound6945/deckygram/releases/latest).
 2. In Decky settings ⚙️ enable **Developer mode**, then
    **Developer → Install plugin from ZIP file** and pick the zip.
    <sub>(or unpack it into `~/homebrew/plugins/` and restart Decky Loader)</sub>
@@ -80,7 +80,7 @@ gallery is never touched.
 
 ### 📦 설치 (ZIP)
 
-1. [**최신 릴리스**](https://github.com/novasound6945/deckygram/releases/latest)에서 **`Deckygram.zip`** 을 내려받습니다.
+1. [**최신 릴리스**](https://github.com/novasound6945/deckygram/releases/latest)에서 **`Deckygram-vX.Y.Z.zip`** 을 내려받습니다.
 2. Decky 설정 ⚙️ 에서 **개발자 모드**를 켜고,
    **개발자 → ZIP 파일에서 플러그인 설치**로 zip을 선택합니다.
    <sub>(또는 `~/homebrew/plugins/` 에 직접 풀고 Decky Loader 재시작)</sub>
