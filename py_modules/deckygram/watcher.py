@@ -29,12 +29,12 @@ import os
 import threading
 import time
 
-from . import tg
+from . import media
 from .inotify import Inotify
 from .qstate import QueueState
 from .sender import Sender, SETTLE_SEC
 
-MEDIA_EXT = tg.IMAGE_EXT | tg.VIDEO_EXT
+MEDIA_EXT = media.IMAGE_EXT | media.VIDEO_EXT
 FULL_SCAN_SEC = 600     # safety net for missed events
 CLIP_SCAN_SEC = 10      # clips are dirs, not files - poll instead of inotify
 
@@ -84,7 +84,7 @@ class Watcher:
         out = []
         for d in self._screenshot_dirs():
             for f in glob.glob(os.path.join(d, "*")):
-                if os.path.isfile(f) and os.path.splitext(f)[1].lower() in tg.IMAGE_EXT:
+                if os.path.isfile(f) and os.path.splitext(f)[1].lower() in media.IMAGE_EXT:
                     out.append(f)
         return out
 
@@ -160,7 +160,7 @@ class Watcher:
             dur = self.sender.clip_duration(d)
             if dur > 0:
                 est = dur * (vbr + 96_000) // 8
-                clip_b += min(est, tg.SIZE_TARGET)
+                clip_b += min(est, self.sender.destination().size_target())
 
         result = {
             "queued": img_n + clip_n,
@@ -274,7 +274,7 @@ class Watcher:
             # Suspended (rejected bot/chat, or a 429 cooldown): keep
             # watching and queueing, just do not call Telegram.
             if not self.sender.blocked():
-                ready = self.qs.take_ready(now, SETTLE_SEC, tg.IMAGE_EXT)
+                ready = self.qs.take_ready(now, SETTLE_SEC, media.IMAGE_EXT)
                 self.sender.process_batch(ready)
 
                 # Clips are directories full of DASH fragments, so inotify on

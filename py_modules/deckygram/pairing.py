@@ -77,6 +77,44 @@ _FORM = """
 {extra}
 """
 
+_FORM_DISCORD = """
+<h2>Deckygram</h2>
+<p class="sub">Discord webhook / 디스코드 웹훅 연결</p>
+<ol>
+ <li>In Discord, open the <b>server</b> and <b>channel</b> you want your
+     screenshots posted to. It can be a server with only you in it -
+     making one is free.<br>
+     디스코드에서 스크린샷을 받을 <b>서버</b>와 <b>채널</b>을 엽니다.
+     나 혼자만 있는 서버여도 되고, 서버 만들기는 무료입니다.</li>
+ <li>Channel name &rarr; <b>Edit Channel</b> &rarr; <b>Integrations</b>
+     &rarr; <b>Webhooks</b> &rarr; <b>New Webhook</b><br>
+     채널 이름 &rarr; <b>채널 편집</b> &rarr; <b>연동</b> &rarr;
+     <b>웹후크</b> &rarr; <b>새 웹후크</b></li>
+ <li>Tap <b>Copy Webhook URL</b> and paste it below<br>
+     <b>웹후크 URL 복사</b>를 누르고 아래에 붙여넣으세요</li>
+</ol>
+<form method="post">
+ <input name="webhook" placeholder="https://discord.com/api/webhooks/..."
+        autocomplete="off">
+ <button type="submit">Connect / 연결</button>
+</form>
+<p class="sub" style="margin-top:14px">Anyone with this URL can post to
+that channel, so treat it like a password. It is stored only on your Deck.<br>
+이 URL을 가진 사람은 누구나 해당 채널에 글을 올릴 수 있으니 비밀번호처럼
+다루세요. 덱에만 저장됩니다.</p>
+{extra}
+"""
+
+_DONE_DISCORD = """
+<h2 class="ok">Connected! / 연결 완료!</h2>
+<p class="sub">A test message should be waiting in your channel.<br>
+채널에 테스트 메시지가 도착해 있을 겁니다.</p>
+<ol>
+ <li>Go back to the Deck - it is already set up<br>
+     덱으로 돌아가면 설정이 끝나 있습니다</li>
+</ol>
+"""
+
 _DONE = """
 <h2 class="ok">Token accepted! / 토큰 확인 완료!</h2>
 <p class="sub">One last step / 마지막 한 단계</p>
@@ -102,19 +140,27 @@ def _lan_ip() -> str:
 
 
 class PairingServer:
-    """One-shot LAN token intake. State machine: waiting -> done | expired."""
+    """One-shot LAN secret intake. State machine: waiting -> done | expired.
 
-    def __init__(self, on_token, log=None):
+    Serves the Telegram walkthrough by default; `mode="discord"` serves
+    the webhook one instead.  Both exist for the same reason: the secret
+    lives on the phone and is far too long to retype on the Deck.
+    """
+
+    def __init__(self, on_token, on_webhook=None, log=None):
         self.on_token = on_token          # callback(token) -> bot_username (or raise)
+        self.on_webhook = on_webhook      # callback(url) -> None (or raise)
         self.log = log or (lambda *a: None)
         self._httpd = None
         self._thread = None
-        self.state = {"status": "idle", "url": "", "bot_username": "", "error": ""}
+        self.state = {"status": "idle", "url": "", "bot_username": "",
+                      "mode": "telegram", "error": ""}
 
-    def start(self) -> dict:
+    def start(self, mode: str = "telegram") -> dict:
         self.stop()
         nonce = secrets.token_urlsafe(6)
         outer = self
+        discord_mode = mode == "discord"
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def _reply(self, code, html):
@@ -129,7 +175,8 @@ class PairingServer:
                 if self.path.rstrip("/") != "/" + nonce:
                     self._reply(404, "<h2>Not found</h2>")
                     return
-                self._reply(200, _FORM.format(extra=""))
+                form = _FORM_DISCORD if discord_mode else _FORM
+                self._reply(200, form.format(extra=""))
 
             def do_POST(self):
                 if self.path.rstrip("/") != "/" + nonce:
@@ -138,7 +185,12 @@ class PairingServer:
                 length = int(self.headers.get("Content-Length", 0) or 0)
                 form = urllib.parse.parse_qs(
                     self.rfile.read(length).decode("utf-8", "replace"))
-                token = (form.get("token") or [""])[0].strip()
+                if discord_mode:
+                    self._accept_webhook((form.get("webhook") or [""])[0].strip())
+                else:
+                    self._accept_token((form.get("token") or [""])[0].strip())
+
+            def _accept_token(self, token):
                 try:
                     bot = outer.on_token(token)
                 except Exception as e:
@@ -150,13 +202,27 @@ class PairingServer:
                 self._reply(200, _DONE.format(bot=bot))
                 threading.Thread(target=outer.stop, daemon=True).start()
 
+            def _accept_webhook(self, url):
+                try:
+                    outer.on_webhook(url)
+                except Exception as e:
+                    self._reply(200, _FORM_DISCORD.format(
+                        extra='<p class="err">Could not use that webhook / '
+                              '웹훅을 사용할 수 없습니다: %s</p>'
+                              % html.escape(str(e))))
+                    return
+                outer.state.update(status="done", bot_username="")
+                self._reply(200, _DONE_DISCORD)
+                threading.Thread(target=outer.stop, daemon=True).start()
+
             def log_message(self, *args):
                 pass
 
         self._httpd = http.server.ThreadingHTTPServer(("0.0.0.0", 0), Handler)
         port = self._httpd.server_address[1]
         url = "http://%s:%d/%s" % (_lan_ip(), port, nonce)
-        self.state = {"status": "waiting", "url": url, "bot_username": "", "error": ""}
+        self.state = {"status": "waiting", "url": url, "bot_username": "",
+                      "mode": mode, "error": ""}
 
         def serve():
             deadline = time.time() + TIMEOUT_SEC

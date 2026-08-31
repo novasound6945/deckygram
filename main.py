@@ -9,7 +9,7 @@ import json
 import os
 
 import decky
-from deckygram import tg
+from deckygram import destinations, discord, media, tg
 from deckygram.appname import AppNameResolver
 from deckygram.pairing import PairingServer
 from deckygram.updates import UpdateChecker
@@ -27,12 +27,15 @@ def _plugin_version() -> str:
         return "?"
 
 DEFAULTS = {
+    # Telegram is the default destination; Discord is opt-in and needs
+    # only a webhook URL (no bot, no token).
+    "destination": "telegram",
     "token": "",
     "chat_id": "",
+    "webhook_url": "",
     "enabled": False,
     "send_screenshots": True,
     "send_clips": True,
-    "original_quality": False,
     "notify_on_send": True,
     "video_bitrate": 2_000_000,
     "video_fps": 30,
@@ -68,22 +71,45 @@ class Plugin:
 
     async def get_settings(self) -> dict:
         s = self._load()
-        # Never hand the full token to the UI; show enough to recognise it.
+        # Never hand the full secrets to the UI; show enough to recognise them.
         if s["token"]:
             s["token_hint"] = s["token"][:8] + "..." + s["token"][-4:]
         else:
             s["token_hint"] = ""
+        url = s.get("webhook_url") or ""
+        # A webhook URL ends with its own credential, so only the channel
+        # id half is safe to echo back.
+        s["webhook_hint"] = url.rsplit("/", 1)[0] + "/..." if url else ""
         s.pop("token")
+        s.pop("webhook_url", None)
         return s
 
     async def save_settings(self, patch: dict) -> dict:
         s = self._load()
         for k, v in patch.items():
-            if k in DEFAULTS and k != "token":
+            if k in DEFAULTS and k not in ("token", "webhook_url"):
                 s[k] = v
         self._save(s)
         self._apply_enabled(s)
         return await self.get_settings()
+
+    async def set_webhook(self, url: str) -> dict:
+        """Store a Discord webhook URL after proving it works."""
+        url = (url or "").strip()
+        if not discord.valid_url(url):
+            return {"ok": False, "error": "that does not look like a Discord "
+                                          "webhook URL"}
+        try:
+            discord.send_test(url)
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+        s = self._load()
+        s["webhook_url"] = url
+        s["destination"] = "discord"
+        self._save(s)
+        self.watcher.sender.clear_broken()
+        self._apply_enabled(s)
+        return {"ok": True}
 
     # ----------------------------------------------------------- onboarding
 
@@ -116,18 +142,15 @@ class Plugin:
         return {"ok": True, "chat_id": chat_id, "name": name}
 
     async def send_test(self) -> dict:
-        s = self._load()
-        if not (s["token"] and s["chat_id"]):
+        dest = destinations.build(self._load())
+        if not dest.configured():
             return {"ok": False, "error": "not configured"}
         try:
-            tg.api_call(s["token"], "sendMessage",
-                        {"chat_id": s["chat_id"],
-                         "text": "Deckygram connected. Screenshots will arrive here."},
-                        timeout=15)
-            # A working test means whatever Telegram objected to is fixed.
+            dest.test()
+            # A working test means whatever was objected to is fixed.
             self.watcher.sender.clear_broken()
             return {"ok": True}
-        except tg.TelegramError as e:
+        except Exception as e:
             return {"ok": False, "error": str(e)}
 
     # --------------------------------------------------------- phone pairing
@@ -141,8 +164,21 @@ class Plugin:
         self.watcher.sender.clear_broken()
         return me.get("username", "")
 
-    async def start_pairing(self) -> dict:
-        return self.pairing.start()
+    def _accept_webhook(self, url: str) -> None:
+        """Validate + store a webhook URL coming from the pairing page."""
+        url = (url or "").strip()
+        if not discord.valid_url(url):
+            raise ValueError("that does not look like a Discord webhook URL")
+        discord.send_test(url)          # raises when Discord refuses it
+        s = self._load()
+        s["webhook_url"] = url
+        s["destination"] = "discord"
+        self._save(s)
+        self.watcher.sender.clear_broken()
+        self._apply_enabled(s)
+
+    async def start_pairing(self, mode: str = "telegram") -> dict:
+        return self.pairing.start(mode)
 
     async def get_pairing(self) -> dict:
         return dict(self.pairing.state)
@@ -161,7 +197,7 @@ class Plugin:
         return {"ok": True, "enabled": s["enabled"]}
 
     def _apply_enabled(self, s: dict) -> None:
-        ready = bool(s["enabled"] and s["token"] and s["chat_id"])
+        ready = bool(s["enabled"] and destinations.build(s).configured())
         if ready:
             self.watcher.start()
         else:
@@ -183,7 +219,8 @@ class Plugin:
         except Exception:
             st["queued"] = 0
         s = self._load()
-        st["configured"] = bool(s["token"] and s["chat_id"])
+        st["configured"] = destinations.build(s).configured()
+        st["destination"] = s.get("destination", "telegram")
         st["enabled"] = s["enabled"]
         return st
 
@@ -201,7 +238,7 @@ class Plugin:
         home = decky.DECKY_USER_HOME
         state_dir = decky.DECKY_PLUGIN_RUNTIME_DIR
         os.makedirs(state_dir, exist_ok=True)
-        tg.TMP_DIR = state_dir   # keep ffmpeg temp files off the RAM-backed /tmp
+        media.TMP_DIR = state_dir  # keep ffmpeg temp files off the RAM-backed /tmp
         resolver = AppNameResolver(home, os.path.join(state_dir, "appnames.json"))
         self.watcher = Watcher(
             home=home,
@@ -211,7 +248,8 @@ class Plugin:
             notify=self._notify,
             log=decky.logger.info,
         )
-        self.pairing = PairingServer(self._accept_token, log=decky.logger.info)
+        self.pairing = PairingServer(self._accept_token, self._accept_webhook,
+                                     log=decky.logger.info)
         self.version = _plugin_version()
         self.updates = UpdateChecker(self.version, log=decky.logger.info)
         self._apply_enabled(self._load())

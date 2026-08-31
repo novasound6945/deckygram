@@ -60,18 +60,6 @@ class TestSinglePhoto(SendTestCase):
         self.assertEqual(self.rec.method, "sendPhoto")
         self.assertIn("photo", self.rec.files)
 
-    def test_original_uses_senddocument(self):
-        tg.send_media("t", "1", self.jpg, "cap", original=True)
-        self.assertEqual(self.rec.method, "sendDocument")
-        self.assertIn("document", self.rec.files)
-
-    def test_original_disables_content_type_detection(self):
-        # Without this Telegram converts the upload back into a compressed
-        # photo, silently undoing "original quality" for single shots.
-        tg.send_media("t", "1", self.jpg, "cap", original=True)
-        self.assertEqual(self.rec.fields.get("disable_content_type_detection"),
-                         "true")
-
     def test_oversized_image_is_unsendable(self):
         big = os.path.join(self.tmp.name, "big.png")
         with open(big, "wb") as f:
@@ -88,15 +76,10 @@ class TestAlbum(SendTestCase):
         self.assertEqual(self.rec.method, "sendMediaGroup")
         self.assertEqual(sorted(self.rec.files), ["photo0", "photo1", "photo2"])
 
-    def test_document_album_is_all_documents(self):
-        tg.send_photo_album("t", "1", self.PATHS, "cap", as_document=True)
-        self.assertEqual(sorted(self.rec.files),
-                         ["document0", "document1", "document2"])
-
     def test_media_items_reference_their_attachments(self):
-        tg.send_photo_album("t", "1", self.PATHS, "cap", as_document=True)
+        tg.send_photo_album("t", "1", self.PATHS, "cap")
         media = json.loads(self.rec.fields["media"])
-        self.assertTrue(all(i["type"] == "document" for i in media))
+        self.assertTrue(all(i["type"] == "photo" for i in media))
         for item in media:
             self.assertIn(item["media"].replace("attach://", ""), self.rec.files)
 
@@ -116,8 +99,8 @@ class TestAlbum(SendTestCase):
             jpg = os.path.join(d, "shot.jpg")
             with open(jpg, "wb") as f:
                 f.write(b"\xff\xd8\xff")
-            tg.send_photo_album("t", "1", [jpg], "cap", as_document=True)
-        self.assertEqual(self.rec.method, "sendDocument")
+            tg.send_photo_album("t", "1", [jpg], "cap")
+        self.assertEqual(self.rec.method, "sendPhoto")
 
     def test_empty_list_sends_nothing(self):
         tg.send_photo_album("t", "1", [], "cap")

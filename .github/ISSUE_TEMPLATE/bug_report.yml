@@ -36,3 +36,4 @@ body:
       label: Checks / 확인
       options:
         - label: I read the Troubleshooting section in the README / README의 문제 해결 섹션을 읽었습니다
+        - label: I restarted Decky after installing (URL/ZIP installs need it) / 설치 후 Decky를 재시작했습니다 (URL·ZIP 설치는 필수)

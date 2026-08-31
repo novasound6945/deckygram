@@ -64,11 +64,11 @@ function QrImage({ text, loading }: { text: string; loading?: boolean }) {
 
 type Settings = {
   token_hint: string;
+  webhook_hint: string;
   chat_id: string;
   enabled: boolean;
   send_screenshots: boolean;
   send_clips: boolean;
-  original_quality: boolean;
   notify_on_send: boolean;
   delete_after_send: boolean;
 };
@@ -88,6 +88,7 @@ type Status = {
   queued_clips: number;
   queued_clips_bytes: number;
   configured: boolean;
+  destination: Destination;
   enabled: boolean;
   version: string;
   ffmpeg_ok: boolean;
@@ -120,7 +121,10 @@ type Pairing = {
   status: "idle" | "waiting" | "done" | "expired";
   url: string;
   bot_username: string;
+  mode: Destination;
 };
+
+type Destination = "telegram" | "discord";
 
 const getSettings = callable<[], Settings>("get_settings");
 const saveSettings = callable<[patch: Partial<Settings>], Settings>("save_settings");
@@ -129,7 +133,8 @@ const detectChat = callable<[], { ok: boolean; chat_id?: string; name?: string; 
 const sendTest = callable<[], { ok: boolean; error?: string }>("send_test");
 const setEnabled = callable<[enabled: boolean], { ok: boolean; enabled: boolean }>("set_enabled");
 const getStatus = callable<[], Status>("get_status");
-const startPairing = callable<[], Pairing>("start_pairing");
+const startPairing = callable<[mode: Destination], Pairing>("start_pairing");
+const setWebhook = callable<[url: string], { ok: boolean; error?: string }>("set_webhook");
 const getPairing = callable<[], Pairing>("get_pairing");
 const stopPairing = callable<[], { ok: boolean }>("stop_pairing");
 const retryQueue = callable<[], { count: number }>("retry_queue");
@@ -137,8 +142,23 @@ const skipQueue = callable<[], { count: number }>("skip_queue");
 
 // ---- setup wizard ----------------------------------------------------------
 
+/** Explanatory text tucked under a button, inside the same row. */
+const destBlurb: React.CSSProperties = {
+  fontSize: "0.75em",
+  lineHeight: 1.4,
+  color: "#8b929a",
+  padding: "0 16px 10px",
+};
+
+/** Separates one destination choice from the next. */
+const destBlurbDivider: React.CSSProperties = {
+  borderBottom: "1px solid rgba(255,255,255,0.1)",
+  marginBottom: 10,
+};
+
 function SetupWizard({ onDone, onCancel }: { onDone: () => void; onCancel?: () => void }) {
-  const [step, setStep] = useState<"pair" | "token" | "chat" | "test">("pair");
+  const [step, setStep] = useState<"where" | "pair" | "token" | "chat" | "test">("where");
+  const [dest, setDest] = useState<Destination>("telegram");
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [tokenInput, setTokenInput] = useState("");
   const [botName, setBotName] = useState("");
@@ -151,13 +171,19 @@ function SetupWizard({ onDone, onCancel }: { onDone: () => void; onCancel?: () =
   useEffect(() => {
     if (step !== "pair") return;
     let alive = true;
-    startPairing().then((p) => { if (alive) setPairing(p); });
+    startPairing(dest).then((p) => { if (alive) setPairing(p); });
     const timer = setInterval(async () => {
       const p = await getPairing();
       if (!alive) return;
       setPairing(p);
       if (p.status === "done") {
         clearInterval(timer);
+        // Discord is finished the moment the webhook is accepted - the
+        // page already sent a test message through it.
+        if (dest === "discord") {
+          onDone();
+          return;
+        }
         setBotName(p.bot_username);
         const r = await detectChat();
         if (r.ok) {
@@ -169,7 +195,16 @@ function SetupWizard({ onDone, onCancel }: { onDone: () => void; onCancel?: () =
       }
     }, 2000);
     return () => { alive = false; clearInterval(timer); stopPairing(); };
-  }, [step]);
+  }, [step, dest]);
+
+  const submitWebhook = async () => {
+    setBusy(true);
+    setMsg("");
+    const r = await setWebhook(tokenInput);
+    setBusy(false);
+    if (r.ok) onDone();
+    else setMsg(t("error_prefix") + (r.error ?? ""));
+  };
 
   const submitToken = async () => {
     setBusy(true);
@@ -213,10 +248,50 @@ function SetupWizard({ onDone, onCancel }: { onDone: () => void; onCancel?: () =
 
   return (
     <PanelSection title={t("setup")}>
+      {step === "where" && (
+        <>
+          <PanelSectionRow>
+            <Field label={t("where_label")} description={t("where_desc")} />
+          </PanelSectionRow>
+          {/* A button draws a separator under itself, which cut each
+              choice away from its own description. Suppress it there and
+              let the description carry the separator instead, so the line
+              lands BETWEEN the two destinations. */}
+          <PanelSectionRow>
+            <div>
+              <ButtonItem
+                layout="below"
+                bottomSeparator="none"
+                onClick={() => { setDest("telegram"); setStep("pair"); }}
+              >
+                {t("dest_telegram")}
+              </ButtonItem>
+              <div style={{ ...destBlurb, ...destBlurbDivider }}>
+                {t("dest_telegram_desc")}
+              </div>
+            </div>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <div>
+              <ButtonItem
+                layout="below"
+                bottomSeparator="none"
+                onClick={() => { setDest("discord"); setStep("pair"); }}
+              >
+                {t("dest_discord")}
+              </ButtonItem>
+              <div style={destBlurb}>{t("dest_discord_desc")}</div>
+            </div>
+          </PanelSectionRow>
+        </>
+      )}
       {step === "pair" && (
         <>
           <PanelSectionRow>
-            <Field label={t("pair_with_phone")} description={t("pair_desc")} />
+            <Field
+              label={t("pair_with_phone")}
+              description={dest === "discord" ? t("pair_desc_discord") : t("pair_desc")}
+            />
           </PanelSectionRow>
           <PanelSectionRow>
             <QrImage text={pairing?.url ?? ""} loading={!pairing?.url} />
@@ -233,7 +308,7 @@ function SetupWizard({ onDone, onCancel }: { onDone: () => void; onCancel?: () =
           </PanelSectionRow>
           <PanelSectionRow>
             <ButtonItem layout="below" onClick={() => setStep("token")}>
-              {t("pair_manual")}
+              {t(dest === "discord" ? "pair_manual_dc" : "pair_manual")}
             </ButtonItem>
           </PanelSectionRow>
         </>
@@ -241,18 +316,26 @@ function SetupWizard({ onDone, onCancel }: { onDone: () => void; onCancel?: () =
       {step === "token" && (
         <>
           <PanelSectionRow>
-            <Field label={t("step1_label")} description={t("step1_desc")} />
+            <Field
+              label={dest === "discord" ? t("webhook_label") : t("step1_label")}
+              description={dest === "discord" ? t("webhook_desc") : t("step1_desc")}
+            />
           </PanelSectionRow>
           <PanelSectionRow>
             <TextField
-              label={t("bot_token")}
+              label={dest === "discord" ? t("webhook_url") : t("bot_token")}
               value={tokenInput}
               onChange={(e) => setTokenInput(e.target.value)}
             />
           </PanelSectionRow>
           <PanelSectionRow>
-            <ButtonItem layout="below" disabled={busy || tokenInput.length < 20} onClick={submitToken}>
-              {busy ? t("checking") : t("validate_token")}
+            <ButtonItem
+              layout="below"
+              disabled={busy || tokenInput.length < 20}
+              onClick={dest === "discord" ? submitWebhook : submitToken}
+            >
+              {busy ? t("checking")
+                    : t(dest === "discord" ? "validate_webhook" : "validate_token")}
             </ButtonItem>
           </PanelSectionRow>
         </>
@@ -323,6 +406,10 @@ function Content() {
     );
   }
 
+  // Which service is configured decides a handful of labels and limits.
+  // Everything else in the panel is identical, so this stays one panel.
+  const onDiscord = status?.destination === "discord";
+
   const patch = async (p: Partial<Settings>) => {
     setSettings(await saveSettings(p));
   };
@@ -334,8 +421,9 @@ function Content() {
           <>
             <PanelSectionRow>
               <Field
-                label={t("setup_broken")}
-                description={t("setup_broken_desc", { why: status.setup_broken })}
+                label={t(onDiscord ? "setup_broken_dc" : "setup_broken")}
+                description={t(onDiscord ? "setup_broken_desc_dc" : "setup_broken_desc",
+                               { why: status.setup_broken })}
               />
             </PanelSectionRow>
             <PanelSectionRow>
@@ -357,7 +445,7 @@ function Content() {
         ) : null}
         <PanelSectionRow>
           <ToggleField
-            label={t("send_to_telegram")}
+            label={t(onDiscord ? "send_to_discord" : "send_to_telegram")}
             description={status?.running ? t("watching_folders", { n: status.watching }) : t("paused")}
             checked={settings.enabled}
             onChange={async (v) => { await setEnabled(v); refresh(); }}
@@ -369,7 +457,7 @@ function Content() {
           </PanelSectionRow>
         ) : null}
         <PanelSectionRow>
-          <Field description={t("only_new_note")} />
+          <Field description={t(onDiscord ? "only_new_note_dc" : "only_new_note")} />
         </PanelSectionRow>
       </PanelSection>
 
@@ -378,16 +466,6 @@ function Content() {
           <ToggleField label={t("screenshots")} checked={settings.send_screenshots}
             onChange={(v) => patch({ send_screenshots: v })} />
         </PanelSectionRow>
-        {settings.send_screenshots ? (
-          <PanelSectionRow>
-            <ToggleField
-              label={t("original_quality")}
-              description={t("original_quality_desc")}
-              checked={settings.original_quality}
-              onChange={(v) => patch({ original_quality: v })}
-            />
-          </PanelSectionRow>
-        ) : null}
         <PanelSectionRow>
           <ToggleField label={t("recorded_clips")} checked={settings.send_clips}
             onChange={(v) => patch({ send_clips: v })} />
@@ -399,7 +477,7 @@ function Content() {
         <PanelSectionRow>
           <ToggleField
             label={t("delete_after")}
-            description={t("delete_after_desc")}
+            description={t(onDiscord ? "delete_after_desc_dc" : "delete_after_desc")}
             checked={settings.delete_after_send}
             onChange={(v) => patch({ delete_after_send: v })}
           />
@@ -476,7 +554,9 @@ function Content() {
         </PanelSectionRow>
         <PanelSectionRow>
           <ButtonItem layout="below" onClick={() => setShowWizard(true)}>
-            {t("rerun_setup")} ({settings.token_hint || t("no_token")})
+            {onDiscord
+              ? `${t("rerun_setup_dc")} (${settings.webhook_hint || t("no_webhook")})`
+              : `${t("rerun_setup")} (${settings.token_hint || t("no_token")})`}
           </ButtonItem>
         </PanelSectionRow>
         <PanelSectionRow>

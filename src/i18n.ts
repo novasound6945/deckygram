@@ -16,6 +16,8 @@ const en: Dict = {
   pair_waiting: "Waiting for your phone...",
   pair_expired: "Pairing timed out. Start again.",
   pair_manual: "Type the token manually instead",
+  pair_manual_dc: "Type the webhook URL manually instead",
+  validate_webhook: "Check webhook",
   back_to_main: "Back (keep current setup)",
   step1_label: "1. Create a bot",
   step1_desc:
@@ -38,15 +40,22 @@ const en: Dict = {
   test_sent: "Test message sent!",
   loading: "Loading...",
   send_to_telegram: "Send to Telegram",
+  send_to_discord: "Send to Discord",
+  only_new_note_dc:
+    "Only media captured while sending is ON gets sent - anything taken while paused stays on the Deck. If you're offline, sends are retried automatically once you're back online. Clips are capped by your Discord server's upload limit (10 MB on a free server), so anything over ~3 minutes is skipped with a toast.",
+  delete_after_desc_dc:
+    "Frees space once media is safely in Discord. Removed items disappear from the Steam gallery.",
+  setup_broken_dc: "Discord rejected this webhook",
+  setup_broken_desc_dc:
+    "Sending is paused - retrying cannot fix this. The webhook or its channel was probably deleted. Reason: {why}",
+  rerun_setup_dc: "Change destination",
+  no_webhook: "no webhook",
   watching_folders: "Watching {n} folders",
   paused: "Paused",
   what_to_send: "What to send",
   screenshots: "Screenshots",
   recorded_clips: "Recorded clips",
   notify_toggle: "Show a toast for each send",
-  original_quality: "Screenshots in original quality",
-  original_quality_desc:
-    "Sends screenshots as files, so Telegram cannot re-compress them - they arrive byte-for-byte as saved on the Deck. The visible gain is small (Telegram keeps full resolution and only shaves ~15% off the file), and they show up as attachments instead of a photo grid.",
   only_new_note:
     "Only media captured while sending is ON gets sent - anything taken while paused stays on the Deck. If you're offline, sends are retried automatically once you're back online. Clips too long to fit under Telegram's 50 MB bot limit are skipped (you'll get a toast).",
   delete_after: "Delete from Deck after sending",
@@ -57,6 +66,20 @@ const en: Dict = {
   update_available: "Update available: {v}",
   open_release: "Open download page",
   ffmpeg_missing: "ffmpeg not found on this system - clip sending is disabled (screenshots still work)",
+  where_label: "Where should media go?",
+  where_desc: "You only set up the one you pick.",
+  dest_telegram: "Telegram (recommended)",
+  dest_telegram_desc:
+    "Screenshots and clips, up to 50 MB each. Arrives as a private chat on your phone. Needs a bot, which the phone page creates for you.",
+  dest_discord: "Discord channel",
+  dest_discord_desc:
+    "Posts to a channel using a webhook - no bot, no account setup. Uploads are capped by the server (10 MB on a free one), so long clips are skipped.",
+  pair_desc_discord:
+    "Open this address in your phone's browser. It shows you where to find the webhook URL in Discord and takes it straight from your phone - no typing on the Deck.",
+  webhook_label: "Paste the webhook URL",
+  webhook_desc:
+    "In Discord: channel name → Edit Channel → Integrations → Webhooks → New Webhook → Copy Webhook URL.",
+  webhook_url: "Webhook URL",
   setup_broken: "Telegram rejected this bot",
   setup_broken_desc:
     "Sending is paused - retrying cannot fix this. The bot may have been deleted, its token regenerated, or you blocked it in Telegram. Reason: {why}",
@@ -87,6 +110,8 @@ const ko: Dict = {
   pair_waiting: "폰에서 입력을 기다리는 중...",
   pair_expired: "시간이 지났습니다. 다시 시작하세요.",
   pair_manual: "토큰을 직접 입력할래요",
+  pair_manual_dc: "URL을 직접 입력할래요",
+  validate_webhook: "웹훅 확인",
   back_to_main: "돌아가기 (기존 설정 유지)",
   step1_label: "1. 봇 만들기",
   step1_desc:
@@ -109,15 +134,22 @@ const ko: Dict = {
   test_sent: "테스트 메시지를 보냈습니다!",
   loading: "불러오는 중...",
   send_to_telegram: "텔레그램으로 보내기",
+  send_to_discord: "디스코드로 보내기",
+  only_new_note_dc:
+    "전송이 켜져 있는 동안 찍은 것만 보냅니다 - 꺼져 있는 동안 찍은 미디어는 기기에만 남습니다. 오프라인이면 온라인 복귀 후 자동으로 재시도해 보냅니다. 클립은 디스코드 서버의 업로드 한도(무료 서버 10MB)를 따르므로, 약 3분이 넘으면 건너뛰고 토스트로 알려드립니다.",
+  delete_after_desc_dc:
+    "디스코드에 안전히 전송된 미디어를 지워 공간을 확보합니다. 스팀 갤러리에서도 사라집니다.",
+  setup_broken_dc: "디스코드가 이 웹훅을 거부했습니다",
+  setup_broken_desc_dc:
+    "전송을 일시 중단했습니다 - 재시도로는 해결되지 않습니다. 웹훅이나 해당 채널이 삭제되었을 가능성이 높습니다. 사유: {why}",
+  rerun_setup_dc: "보낼 곳 바꾸기",
+  no_webhook: "웹훅 없음",
   watching_folders: "폴더 {n}곳 감시 중",
   paused: "일시정지됨",
   what_to_send: "보낼 항목",
   screenshots: "스크린샷",
   recorded_clips: "녹화 클립",
   notify_toggle: "전송 결과 알림 표시",
-  original_quality: "스크린샷 원본 화질",
-  original_quality_desc:
-    "스크린샷을 파일로 보내 텔레그램이 재압축하지 못하게 합니다. 덱에 저장된 것과 완전히 동일한 파일이 도착하지만, 체감 화질 차이는 크지 않습니다(해상도는 그대로 유지되고 용량만 약 15% 줄어듦). 사진 그리드가 아니라 첨부 파일로 표시됩니다.",
   only_new_note:
     "전송이 켜져 있는 동안 찍은 것만 보냅니다 - 꺼져 있는 동안 찍은 미디어는 기기에만 남습니다. 오프라인이면 온라인 복귀 후 자동으로 재시도해 보냅니다. 텔레그램 봇 한도(50MB)에 맞출 수 없는 긴 클립은 건너뛰며, 토스트로 알려드립니다.",
   delete_after: "보낸 뒤 기기에서 삭제",
@@ -128,6 +160,20 @@ const ko: Dict = {
   update_available: "업데이트 있음: {v}",
   open_release: "다운로드 페이지 열기",
   ffmpeg_missing: "이 시스템에 ffmpeg가 없어 클립 전송이 비활성화되었습니다 (스크린샷은 정상 동작)",
+  where_label: "어디로 보낼까요?",
+  where_desc: "선택한 쪽만 설정하면 됩니다.",
+  dest_telegram: "텔레그램 (권장)",
+  dest_telegram_desc:
+    "스크린샷과 클립을 개당 50MB까지 보냅니다. 폰의 개인 대화로 도착합니다. 봇이 필요하지만 폰 안내 페이지가 만들어 줍니다.",
+  dest_discord: "디스코드 채널",
+  dest_discord_desc:
+    "웹훅으로 채널에 올립니다 - 봇도, 별도 계정 설정도 없습니다. 업로드 용량은 서버 등급을 따르므로(무료 서버 10MB) 긴 클립은 건너뜁니다.",
+  pair_desc_discord:
+    "폰 브라우저로 이 주소를 여세요. 디스코드에서 웹훅 URL을 어디서 찾는지 안내하고, 폰에서 바로 가져옵니다 - 덱에서 입력할 필요가 없습니다.",
+  webhook_label: "웹훅 URL 붙여넣기",
+  webhook_desc:
+    "디스코드에서: 채널 이름 → 채널 편집 → 연동 → 웹후크 → 새 웹후크 → 웹후크 URL 복사.",
+  webhook_url: "웹훅 URL",
   setup_broken: "텔레그램이 이 봇을 거부했습니다",
   setup_broken_desc:
     "전송을 일시 중단했습니다 - 재시도로는 해결되지 않습니다. 봇이 삭제되었거나, 토큰이 재발급되었거나, 텔레그램에서 봇을 차단했을 수 있습니다. 사유: {why}",

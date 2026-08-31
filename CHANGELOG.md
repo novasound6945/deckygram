@@ -2,6 +2,46 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.2.0
+
+### Added / 추가
+- **Discord as an alternative destination.** The setup wizard now starts
+  by asking where media should go; you only set up the one you pick, so
+  choosing Discord skips the Telegram bot flow entirely. A webhook URL is
+  the whole credential — no bot, no account setup — and the phone pairing
+  page takes it from your phone the same way it takes a bot token.
+  Telegram remains the default and the recommended option.
+  **디스코드를 대안 목적지로 추가.** 마법사가 어디로 보낼지 먼저 묻고,
+  **선택한 쪽만 설정**하면 됩니다 — 디스코드를 고르면 텔레그램 봇 과정을
+  건너뜁니다. 웹훅 URL 하나가 전부이고(봇도 계정 설정도 없음), 폰
+  페어링 페이지가 토큰과 같은 방식으로 폰에서 가져옵니다. 기본값과
+  권장은 계속 텔레그램입니다.
+- Clips work on Discord too, encoded to that server's tighter budget
+  (9 MB, 480p); anything over roughly three minutes is skipped with a
+  toast, as it cannot fit at watchable quality.
+  디스코드에서도 클립을 보냅니다. 더 빡빡한 예산(9MB, 480p)에 맞춰
+  인코딩하며, 약 3분이 넘으면 볼 만한 화질로 담을 수 없어 건너뜁니다.
+
+### Removed / 제거
+- **Screenshots in original quality.** Measured on hardware, the gain was
+  96,865 vs 80,133 bytes at identical resolution — real but too small to
+  justify a toggle most people would never touch.
+  **스크린샷 원본 화질 옵션을 제거했습니다.** 실측 결과 같은 해상도에서
+  96,865 대 80,133바이트로, 차이는 있지만 토글을 유지할 만큼은
+  아니었습니다.
+
+### Fixed / 수정
+- Every HTTP request now sends a real User-Agent. Discord's Cloudflare
+  edge rejects urllib's default outright (403, error 1010), so webhook
+  sends failed until this was set.
+  모든 HTTP 요청이 제대로 된 User-Agent를 보냅니다. 디스코드의
+  Cloudflare가 urllib 기본값을 차단(403, 오류 1010)해서 웹훅 전송이
+  실패하던 문제입니다.
+- Documented that **URL and ZIP installs need a Decky restart** before
+  the plugin appears — Decky does not prompt, and reloading the frontend
+  does not help ([decky-loader#527](https://github.com/SteamDeckHomebrew/decky-loader/issues/527)).
+  **URL·ZIP 설치 후 Decky 재시작이 필요하다**는 점을 문서에 명시했습니다.
+
 ## v0.1.6
 
 ### Changed / 변경

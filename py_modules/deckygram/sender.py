@@ -15,7 +15,8 @@ import subprocess
 import tempfile
 import time
 
-from . import captions, tg
+from . import captions, destinations, media
+from .errors import SetupBroken, Unsendable
 
 SETTLE_SEC = 3          # wait after last write before sending
 CLIP_SETTLE_SEC = 30    # clips: recording may still be in progress
@@ -38,12 +39,12 @@ class Sender:
         # would otherwise fail-and-retry forever.  Screenshots do not need
         # it, so we just disable the clip pipeline and say why.
         self.ffmpeg_ok = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
-        # Set when Telegram rejects the bot/chat itself.  Sending is then
-        # suspended (retrying cannot help) until the user fixes it; we
-        # re-test every RECHECK_SEC so a bot unblocked inside Telegram -
-        # which changes no setting here - recovers on its own.
+        # Set when the destination rejects the bot/chat/webhook itself.
+        # Sending is then suspended (retrying cannot help) until the user
+        # fixes it; we re-test every RECHECK_SEC so a bot unblocked inside
+        # Telegram - which changes no setting here - recovers on its own.
         self._broken_at = 0.0
-        self._paused_until = 0.0    # honours Telegram's 429 retry_after
+        self._paused_until = 0.0    # honours a 429's retry_after
 
     @staticmethod
     def _friendly(e):
@@ -74,22 +75,22 @@ class Sender:
     def _note_failure(self, e):
         """Record a failed send; returns True if it was a fatal setup error."""
         self.status["failed"] += 1
-        if isinstance(e, tg.SetupBroken):
+        if isinstance(e, SetupBroken):
             first = not self.status.get("setup_broken")
             self.status["setup_broken"] = str(e)[:200]
             self.status["last_error"] = str(e)[:200]
             self._broken_at = time.time()
-            self.log("telegram rejected this bot/chat: %s "
+            self.log("destination rejected this setup: %s "
                      "(sending suspended, re-checking in %ds)" % (e, RECHECK_SEC))
             if first:
                 # Tell the user once, not every 30 seconds.
                 self.notify("broken", "Deckygram needs setting up again",
-                            "Telegram rejected the bot: %s" % e)
+                            "%s" % e)
             return True
         retry_after = getattr(e, "retry_after", 0)
         if retry_after:
             self._paused_until = time.time() + retry_after + 1
-            self.log("rate limited by telegram; pausing %ds" % retry_after)
+            self.log("rate limited; pausing %ds" % retry_after)
         self.status["last_error"] = self._friendly(e)
         return False
 
@@ -121,6 +122,10 @@ class Sender:
 
     # ----------------------------------------------------------------- sending
 
+    def destination(self):
+        """Current destination, rebuilt each time so settings edits apply."""
+        return destinations.build(self.get_settings())
+
     def _send_file(self, path, caption):
         s = self.get_settings()
 
@@ -131,19 +136,19 @@ class Sender:
             label = "Encoding" if name == "encoding" else "Sending"
             self.status["current"] = "%s: %s" % (label, caption)
 
-        tg.send_media(s["token"], s["chat_id"], path, caption,
-                      bitrate=int(s.get("video_bitrate", 2_000_000)),
-                      fps=int(s.get("video_fps", 30)),
-                      maxh=int(s.get("video_maxh", 600)),
-                      progress=prog, phase=phase,
-                      original=bool(s.get("original_quality")))
+        self.destination().send(
+            path, caption,
+            bitrate=int(s.get("video_bitrate", 2_000_000)),
+            fps=int(s.get("video_fps", 30)),
+            maxh=int(s.get("video_maxh", 600)),
+            progress=prog, phase=phase)
 
     def process_file(self, path):
         if path in self.qs.sent or not os.path.isfile(path):
             return
         s = self.get_settings()
         ext = os.path.splitext(path)[1].lower()
-        if ext in tg.IMAGE_EXT and not s.get("send_screenshots", True):
+        if ext in media.IMAGE_EXT and not s.get("send_screenshots", True):
             return
         # Still being written (full scan can discover a file mid-write,
         # unlike the IN_CLOSE_WRITE inotify path): come back later.
@@ -163,10 +168,10 @@ class Sender:
             self.status["last_sent"] = caption
             self.log("sent: %s" % os.path.basename(path))
             if s.get("notify_on_send", True):
-                self.notify("sent", "Sent to Telegram", caption)
+                self.notify("sent", "Sent", caption)
             if s.get("delete_after_send"):
                 self._delete_media(path)
-        except tg.Unsendable as e:
+        except Unsendable as e:
             self.qs.mark_sent(path)
             self.log("skipped (%s): %s" % (e, os.path.basename(path)))
         except Exception as e:
@@ -207,7 +212,7 @@ class Sender:
             if not os.path.isfile(p):
                 continue
             appid = captions.appid_from_path(p)
-            if (appid and os.path.splitext(p)[1].lower() in tg.IMAGE_EXT
+            if (appid and os.path.splitext(p)[1].lower() in media.IMAGE_EXT
                     and s.get("send_screenshots", True)
                     and p not in self.qs.sent
                     and p not in self.qs.no_album):
@@ -230,8 +235,7 @@ class Sender:
         caption = captions.album_caption(appid, self.resolver, len(files))
         self.status["current"] = "Sending album: %s" % caption
         try:
-            tg.send_photo_album(s["token"], s["chat_id"], files, caption,
-                                as_document=bool(s.get("original_quality")))
+            self.destination().send_album(files, caption)
             for p in files:
                 self.qs.mark_sent(p)
                 self.qs.bump_sent()
@@ -241,7 +245,7 @@ class Sender:
             self.status["last_sent"] = caption
             self.log("album sent: %s" % caption)
             if s.get("notify_on_send", True):
-                self.notify("sent", "Sent to Telegram", caption)
+                self.notify("sent", "Sent", caption)
         except Exception as e:
             # Fall back to per-file sends (with their own retry) next tick.
             fatal = self._note_failure(e)
@@ -310,12 +314,12 @@ class Sender:
         # ~30+ minutes) are rejected up front, before spending a GB-scale
         # remux on them.
         dur = self.clip_duration(clip_dir)
-        if tg.hopeless(dur):
+        if self.destination().hopeless(dur):
             self.qs.mark_clip_done(clip_id)
             self.log("clip skipped up front (too long: %ds): %s" % (dur, clip_id))
             if s.get("notify_on_send", True):
                 self.notify("skipped", "Clip not sent",
-                            "Too long to fit under Telegram's 50 MB bot limit")
+                            "Too long to fit the upload limit")
             return
 
         # Remux target lives on disk (state dir), NOT /tmp: SteamOS /tmp is
@@ -342,15 +346,15 @@ class Sender:
             self.status["last_sent"] = caption
             self.log("clip sent: %s" % clip_id)
             if s.get("notify_on_send", True):
-                self.notify("sent", "Clip sent to Telegram", caption)
+                self.notify("sent", "Clip sent", caption)
             if s.get("delete_after_send"):
                 self._delete_clip(clip_dir)
-        except tg.Unsendable as e:
+        except Unsendable as e:
             self.qs.mark_clip_done(clip_id)
             self.log("clip skipped (%s): %s" % (e, clip_id))
             if s.get("notify_on_send", True):
                 self.notify("skipped", "Clip not sent",
-                            "Too long to fit under Telegram's 50 MB bot limit")
+                            "Too long to fit the upload limit")
         except Exception as e:
             fatal = self._note_failure(e)
             tries = self.qs.note_attempt(clip_id)

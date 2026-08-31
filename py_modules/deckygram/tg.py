@@ -1,18 +1,9 @@
-"""Telegram Bot API client and media preparation.
+"""Telegram Bot API client - the plugin's primary destination.
 
-Stdlib only (urllib + a small multipart encoder) so the plugin has zero
-Python dependencies.
-
-Videos are compressed before sending so they arrive fast on a phone:
-  - frame rate is capped (default 30 fps)
-  - bitrate is capped; if the source is already light it is sent as-is
-  - files over the 50 MB bot limit get their bitrate lowered to fit
-
-Compression uses the Deck's hardware encoder (VAAPI, H.265) end to end -
-decode, scale and encode all stay on the GPU's dedicated video block, so
-a running game is barely affected.  Measured on a Steam Deck: an
-89-second clip encodes in ~13 s at ~7 % CPU.  Falls back to H.264 VAAPI,
-then software x264, for sources the hardware cannot handle.
+Stdlib only (urllib + the shared multipart encoder in net.py) so the
+plugin has zero Python dependencies.  Video compression lives in
+media.py, shared with the other destinations; Telegram's share of it is
+just the size budget: 50 MB per upload, aimed at 45 MB for headroom.
 
 sendVideo is always given width/height/duration/supports_streaming:
 without them Telegram's player guesses the size and the aspect ratio
@@ -20,90 +11,39 @@ looks squashed.
 """
 
 import json
-import mimetypes
 import os
-import ssl
-import subprocess
-import tempfile
-import urllib.error
-import urllib.request
-import uuid
+
+from . import media, net
+from .errors import SendError, SetupBroken, Unsendable
 
 API = "https://api.telegram.org/bot%s/%s"
 
-# Decky Loader ships its own bundled Python which does not know where
-# SteamOS keeps its CA certificates, so default HTTPS verification fails
-# with CERTIFICATE_VERIFY_FAILED.  Point the SSL context at the system
-# bundle explicitly, falling back to library defaults.
-_CA_CANDIDATES = (
-    "/etc/ssl/certs/ca-certificates.crt",   # SteamOS / Arch / Debian
-    "/etc/pki/tls/certs/ca-bundle.crt",     # Fedora
-    "/etc/ssl/cert.pem",                    # others
-)
+# Kept as module attributes: appname.py and updates.py reach for the
+# shared TLS context through here, and the plugin has been shipping that
+# way since before there was a net module.
+_SSL_CTX = net.SSL_CTX
+_multipart = net.multipart
 
-
-def _make_ssl_context() -> ssl.SSLContext:
-    for path in _CA_CANDIDATES:
-        if os.path.isfile(path):
-            try:
-                return ssl.create_default_context(cafile=path)
-            except Exception:
-                pass
-    return ssl.create_default_context()
-
-
-_SSL_CTX = _make_ssl_context()
-
-# Where compression temp files go.  The host (main.py) points this at the
-# plugin state dir on disk, because /tmp on SteamOS is RAM-backed tmpfs.
-TMP_DIR = None
 BOT_LIMIT = 50 * 1024 * 1024
 SIZE_TARGET = 45 * 1024 * 1024   # leave headroom under the hard limit
-VAAPI_DEV = "/dev/dri/renderD128"
 
-IMAGE_EXT = {".jpg", ".jpeg", ".png"}
-VIDEO_EXT = {".mp4", ".mkv", ".webm", ".mov"}
-
-AUDIO_BITRATE = 128_000     # generous bound for the 96k AAC track + container
-MIN_BITRATE = 400_000       # below this the video is not worth watching
+# Media handling is shared with the other destinations; these aliases keep
+# the long-standing tg.IMAGE_EXT / tg.VIDEO_EXT spellings working.
+IMAGE_EXT = media.IMAGE_EXT
+VIDEO_EXT = media.VIDEO_EXT
 
 
 def fit_bitrate(duration_sec: int, desired: int) -> int:
-    """Highest video bitrate that keeps `duration_sec` under SIZE_TARGET."""
-    fit = SIZE_TARGET * 8 // duration_sec - AUDIO_BITRATE
-    return min(desired, fit)
+    return media.fit_bitrate(SIZE_TARGET, duration_sec, desired)
 
 
 def hopeless(duration_sec: int) -> bool:
-    """True when no watchable bitrate can fit the clip under the bot limit."""
-    return duration_sec > 0 and \
-        SIZE_TARGET * 8 // duration_sec - AUDIO_BITRATE < MIN_BITRATE
+    return media.hopeless(SIZE_TARGET, duration_sec)
 
 
-class TelegramError(Exception):
-    """An error reported by Telegram (or a failed HTTP call).
-
-    `code` is Telegram's error_code when it gave one, `retry_after` the
-    cooldown it asked for on a 429.
-    """
-
-    def __init__(self, message, code=None, retry_after=0):
-        super().__init__(message)
-        self.code = code
-        self.retry_after = retry_after
-
-
-class Unsendable(Exception):
-    """Permanently unsendable (too big even after compression) - skip, don't retry."""
-
-
-class SetupBroken(TelegramError):
-    """Telegram refuses this bot/chat outright - retrying cannot help.
-
-    Raised for a revoked token, a deleted bot, a blocked bot or a chat
-    that no longer exists.  The fix is always a human one, so the caller
-    must stop sending and tell the user instead of hammering the API.
-    """
+# Telegram's errors are the shared ones; the old name stays as an alias
+# because main.py and the pairing flow catch TelegramError by name.
+TelegramError = SendError
 
 
 # Telegram's own wording for the config-level rejections.  Codes alone are
@@ -130,47 +70,16 @@ def classify(description: str, code):
 
 # ----------------------------------------------------------------- HTTP layer
 
-def _multipart(fields: dict, files: dict):
-    boundary = uuid.uuid4().hex
-    body = bytearray()
-    for name, value in fields.items():
-        body += ("--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n"
-                 % (boundary, name, value)).encode("utf-8")
-    for name, path in files.items():
-        ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
-        body += ("--%s\r\nContent-Disposition: form-data; name=\"%s\"; filename=\"%s\"\r\n"
-                 "Content-Type: %s\r\n\r\n"
-                 % (boundary, name, os.path.basename(path), ctype)).encode("utf-8")
-        with open(path, "rb") as f:
-            body += f.read()
-        body += b"\r\n"
-    body += ("--%s--\r\n" % boundary).encode()
-    return bytes(body), "multipart/form-data; boundary=%s" % boundary
-
-
 def api_call(token: str, method: str, fields: dict = None, files: dict = None,
              timeout: int = 600) -> dict:
-    url = API % (token, method)
-    if files:
-        body, ctype = _multipart(fields or {}, files)
-        req = urllib.request.Request(url, data=body, headers={"Content-Type": ctype})
-    elif fields:
-        body = json.dumps(fields).encode("utf-8")
-        req = urllib.request.Request(url, data=body,
-                                     headers={"Content-Type": "application/json"})
-    else:
-        req = urllib.request.Request(url)
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CTX) as resp:
-            payload = json.load(resp)
-    except urllib.error.HTTPError as e:
-        try:
-            payload = json.load(e)
-        except Exception:
-            raise classify("", e.code)("HTTP %s" % e.code, code=e.code)
-    except Exception as e:
+        status, payload = net.request(API % (token, method), fields=fields,
+                                      files=files, timeout=timeout)
+    except net.Unreachable as e:
         # Connection-level failure: no Telegram verdict, so always retryable.
         raise TelegramError(str(e))
+    if payload is None:
+        raise classify("", status)("HTTP %s" % status, code=status)
     if not payload.get("ok"):
         desc = payload.get("description", "unknown error")
         code = payload.get("error_code")
@@ -179,208 +88,34 @@ def api_call(token: str, method: str, fields: dict = None, files: dict = None,
     return payload.get("result", {})
 
 
-# ------------------------------------------------------------------- ffprobe
-
-def _probe(path: str):
-    """Return (width, height, duration_sec) - zeros when unknown."""
-    def run(args):
-        try:
-            out = subprocess.run(["ffprobe", "-v", "error"] + args,
-                                 capture_output=True, text=True, timeout=30)
-            return out.stdout.strip()
-        except Exception:
-            return ""
-
-    dims = run(["-select_streams", "v:0", "-show_entries", "stream=width,height",
-                "-of", "csv=p=0:s=x", path])
-    dur = run(["-show_entries", "format=duration", "-of", "default=nw=1:nk=1", path])
-    w = h = d = 0
-    if "x" in dims:
-        try:
-            w, h = (int(x) for x in dims.split("x")[:2])
-        except ValueError:
-            pass
-    try:
-        d = int(float(dur))
-    except ValueError:
-        pass
-    return w, h, d
-
-
-# --------------------------------------------------------------- compression
-
-def _run_ffmpeg(cmd, duration: int, progress=None) -> bool:
-    """Run one ffmpeg command, feeding percent updates to `progress`.
-
-    ffmpeg's machine-readable "-progress" stream reports out_time_us
-    (microseconds of output written); against the known source duration
-    that yields a live percentage.
-    """
-    proc = None
-    try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL, text=True)
-        for line in proc.stdout:
-            if not progress or duration <= 0:
-                continue
-            key, _, val = line.strip().partition("=")
-            us = None
-            if key == "out_time_us":
-                try:
-                    us = int(val)
-                except ValueError:
-                    pass
-            elif key == "out_time_ms":     # historic quirk: value is also µs
-                try:
-                    us = int(val)
-                except ValueError:
-                    pass
-            if us is not None and us >= 0:
-                progress(min(99, int(us / (duration * 1_000_000) * 100)))
-        proc.wait(timeout=1800)
-        return proc.returncode == 0
-    except Exception:
-        if proc is not None:
-            try:
-                proc.kill()
-            except Exception:
-                pass
-        return False
-
-
-def _encode(src: str, dst: str, bitrate: int, fps: int, maxh: int,
-            progress=None) -> bool:
-    """Try full-GPU H.265, then GPU with CPU decode, then software x264."""
-    w, h, dur = _probe(src)
-    scale_hw = ""
-    scale_sw = ""
-    if maxh and h > maxh and w:
-        tw = (w * maxh // h) // 2 * 2
-        scale_hw = ",scale_vaapi=w=%d:h=%d" % (tw, maxh)
-        scale_sw = ",scale=-2:%d" % maxh
-
-    nice = ["nice", "-n", "19", "ionice", "-c", "3"] if os.name != "nt" else []
-    prog = ["-progress", "pipe:1", "-nostats"]
-    attempts = [
-        nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
-                "-hwaccel", "vaapi", "-hwaccel_device", VAAPI_DEV,
-                "-hwaccel_output_format", "vaapi", "-i", src,
-                "-vf", "fps=%d%s" % (fps, scale_hw),
-                "-c:v", "hevc_vaapi", "-b:v", str(bitrate), "-maxrate", str(bitrate),
-                "-compression_level", "1", "-tag:v", "hvc1",
-                "-c:a", "aac", "-b:a", "96k", dst],
-        nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
-                "-vaapi_device", VAAPI_DEV, "-i", src,
-                "-vf", "fps=%d%s,format=nv12,hwupload" % (fps, scale_sw),
-                "-c:v", "hevc_vaapi", "-b:v", str(bitrate), "-maxrate", str(bitrate),
-                "-compression_level", "1", "-tag:v", "hvc1",
-                "-c:a", "aac", "-b:a", "96k", dst],
-        nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
-                "-vaapi_device", VAAPI_DEV, "-i", src,
-                "-vf", "fps=%d%s,format=nv12,hwupload" % (fps, scale_sw),
-                "-c:v", "h264_vaapi", "-b:v", str(bitrate), "-maxrate", str(bitrate),
-                "-c:a", "aac", "-b:a", "96k", dst],
-        nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
-                "-i", src,
-                "-vf", "fps=%d%s" % (fps, scale_sw),
-                "-c:v", "libx264", "-preset", "veryfast",
-                "-b:v", str(bitrate), "-maxrate", str(bitrate),
-                "-bufsize", str(bitrate * 2),
-                "-c:a", "aac", "-b:a", "96k", dst],
-    ]
-    for cmd in attempts:
-        if _run_ffmpeg(cmd, dur, progress):
-            try:
-                if os.path.getsize(dst) > 0:
-                    return True
-            except OSError:
-                pass
-    return False
-
-
-def _prepare_video(path: str, bitrate: int, fps: int, maxh: int,
-                   progress=None, phase=None):
-    """Return path to send (original or a compressed temp file).
-
-    Raises Unsendable when the file cannot be brought under the bot limit.
-    """
-    size = os.path.getsize(path)
-    _, _, dur = _probe(path)
-
-    if dur <= 0:
-        if size > BOT_LIMIT:
-            raise Unsendable("cannot read duration of oversized video")
-        return path, None
-
-    src_br = size * 8 // dur
-    target = fit_bitrate(dur, bitrate)
-
-    # Already light enough (within 15 % of the cap): send as-is.
-    if size <= BOT_LIMIT and src_br <= target * 115 // 100:
-        return path, None
-
-    if target < MIN_BITRATE:
-        raise Unsendable("video too long to fit under 50 MB at watchable quality")
-
-    tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False, dir=TMP_DIR)
-    tmp.close()
-    if phase:
-        phase("encoding")
-    if not _encode(path, tmp.name, target, fps, maxh, progress):
-        os.unlink(tmp.name)
-        raise Unsendable("all encoders failed")
-
-    new = os.path.getsize(tmp.name)
-    if new == 0 or new > BOT_LIMIT:
-        os.unlink(tmp.name)
-        raise Unsendable("compressed output still over the limit")
-    if new >= size and size <= BOT_LIMIT:
-        os.unlink(tmp.name)     # compression did not help; keep the original
-        return path, None
-    return tmp.name, tmp.name
-
-
 # ------------------------------------------------------------------- sending
 
 def send_media(token: str, chat_id: str, path: str, caption: str,
                bitrate: int = 2_000_000, fps: int = 30, maxh: int = 600,
-               progress=None, phase=None, original: bool = False) -> None:
-    """Send one file. Raises TelegramError (retryable) or Unsendable (skip).
-
-    original=True sends images as documents: Telegram re-compresses every
-    sendPhoto server-side, sendDocument delivers the file byte-for-byte.
-    """
+               progress=None, phase=None) -> None:
+    """Send one file. Raises TelegramError (retryable) or Unsendable (skip)."""
     ext = os.path.splitext(path)[1].lower()
     cleanup = None
     try:
         if ext in IMAGE_EXT:
             if os.path.getsize(path) > BOT_LIMIT:
                 raise Unsendable("image over bot limit")
-            if original:
-                # Without disable_content_type_detection Telegram sniffs the
-                # upload, recognises an image and converts it back into a
-                # compressed photo - defeating the whole point.  (Album
-                # sends force this off already, single sends must ask.)
-                api_call(token, "sendDocument",
-                         {"chat_id": chat_id, "caption": caption,
-                          "disable_content_type_detection": "true"},
-                         {"document": path})
-            else:
-                api_call(token, "sendPhoto",
-                         {"chat_id": chat_id, "caption": caption},
-                         {"photo": path})
+            api_call(token, "sendPhoto",
+                     {"chat_id": chat_id, "caption": caption},
+                     {"photo": path})
             return
 
         if ext in VIDEO_EXT:
-            send_path, cleanup = _prepare_video(path, bitrate, fps, maxh,
-                                                progress, phase)
+            send_path, cleanup = media.prepare_video(
+                path, BOT_LIMIT, SIZE_TARGET, bitrate, fps, maxh,
+                progress, phase)
             # Encoding is done; the upload that follows has no percentage,
             # so hide the number instead of freezing at 99%.
             if progress:
                 progress(-1)
             if phase:
                 phase("uploading")
-            w, h, d = _probe(send_path)
+            w, h, d = media.probe(send_path)
             fields = {"chat_id": chat_id, "caption": caption,
                       "supports_streaming": "true"}
             if w and h:
@@ -402,30 +137,25 @@ def send_media(token: str, chat_id: str, path: str, caption: str,
                 pass
 
 
-def send_photo_album(token: str, chat_id: str, paths: list, caption: str,
-                     as_document: bool = False) -> None:
+def send_photo_album(token: str, chat_id: str, paths: list, caption: str) -> None:
     """Send up to 10 photos as ONE album (one notification on the phone).
 
     A screenshot burst would otherwise ping the phone once per shot.
     Telegram's sendMediaGroup takes a JSON media array whose items
     reference the multipart files via attach://<name>; only the first
     item's caption is shown for the album.
-
-    as_document=True groups them as files instead (original quality; a
-    media group must be all-photo or all-document, never mixed).
     """
     if not paths:
         return
     if len(paths) == 1:
-        send_media(token, chat_id, paths[0], caption, original=as_document)
+        send_media(token, chat_id, paths[0], caption)
         return
 
-    kind = "document" if as_document else "photo"
     media = []
     files = {}
     for i, p in enumerate(paths[:10]):
-        name = "%s%d" % (kind, i)
-        item = {"type": kind, "media": "attach://" + name}
+        name = "photo%d" % i
+        item = {"type": "photo", "media": "attach://" + name}
         if i == 0:
             item["caption"] = caption
         media.append(item)
