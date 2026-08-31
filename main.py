@@ -12,9 +12,19 @@ import decky
 from deckygram import tg
 from deckygram.appname import AppNameResolver
 from deckygram.pairing import PairingServer
+from deckygram.updates import UpdateChecker
 from deckygram.watcher import Watcher
 
 SETTINGS_FILE = os.path.join(decky.DECKY_PLUGIN_SETTINGS_DIR, "settings.json")
+
+
+def _plugin_version() -> str:
+    try:
+        with open(os.path.join(decky.DECKY_PLUGIN_DIR, "package.json"),
+                  encoding="utf-8") as f:
+            return json.load(f).get("version", "?")
+    except Exception:
+        return "?"
 
 DEFAULTS = {
     "token": "",
@@ -158,7 +168,10 @@ class Plugin:
         return {"count": self.watcher.skip_queued()}
 
     async def get_status(self) -> dict:
+        self.updates.poke()
         st = dict(self.watcher.status)
+        st["version"] = self.version
+        st.update(self.updates.state)
         try:
             st.update(self.watcher.queue_info())
         except Exception:
@@ -193,6 +206,8 @@ class Plugin:
             log=decky.logger.info,
         )
         self.pairing = PairingServer(self._accept_token, log=decky.logger.info)
+        self.version = _plugin_version()
+        self.updates = UpdateChecker(self.version, log=decky.logger.info)
         self._apply_enabled(self._load())
         decky.logger.info("Deckygram loaded")
 

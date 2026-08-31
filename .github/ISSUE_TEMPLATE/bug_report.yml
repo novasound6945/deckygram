@@ -1,0 +1,38 @@
+name: Bug report / 버그 제보
+description: Something broke / 뭔가 잘못 동작해요
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Deckygram version / 버전
+      description: Shown at the bottom of the plugin panel / 플러그인 패널 맨 아래에 표시됩니다
+      placeholder: v0.1.2
+    validations:
+      required: true
+  - type: input
+    id: steamos
+    attributes:
+      label: SteamOS version / SteamOS 버전
+      placeholder: "3.7.x (Settings → System)"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened / 무슨 일이 있었나요
+      description: What did you do, what did you expect, what actually happened? / 무엇을 했고, 무엇을 기대했고, 실제로는 어땠나요?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log / 로그
+      description: |
+        Newest file in `~/homebrew/logs/Deckygram/` (Desktop mode → Dolphin file manager, or `cat` over SSH).
+        `~/homebrew/logs/Deckygram/` 의 최신 파일을 붙여넣어 주세요 (데스크톱 모드의 Dolphin 파일 관리자, 또는 SSH).
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks / 확인
+      options:
+        - label: I read the Troubleshooting section in the README / README의 문제 해결 섹션을 읽었습니다

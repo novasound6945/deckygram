@@ -1,5 +1,6 @@
 import {
   ButtonItem,
+  Navigation,
   PanelSection,
   PanelSectionRow,
   TextField,
@@ -87,6 +88,11 @@ type Status = {
   queued_clips_bytes: number;
   configured: boolean;
   enabled: boolean;
+  version: string;
+  ffmpeg_ok: boolean;
+  update_available: boolean;
+  latest: string;
+  url: string;
 };
 
 function humanSize(bytes: number): string {
@@ -128,7 +134,7 @@ const skipQueue = callable<[], { count: number }>("skip_queue");
 
 // ---- setup wizard ----------------------------------------------------------
 
-function SetupWizard({ onDone }: { onDone: () => void }) {
+function SetupWizard({ onDone, onCancel }: { onDone: () => void; onCancel?: () => void }) {
   const [step, setStep] = useState<"pair" | "token" | "chat" | "test">("pair");
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [tokenInput, setTokenInput] = useState("");
@@ -272,6 +278,13 @@ function SetupWizard({ onDone }: { onDone: () => void }) {
           <Field description={msg} />
         </PanelSectionRow>
       )}
+      {onCancel && (
+        <PanelSectionRow>
+          <ButtonItem layout="below" onClick={onCancel}>
+            {t("back_to_main")}
+          </ButtonItem>
+        </PanelSectionRow>
+      )}
     </PanelSection>
   );
 }
@@ -299,7 +312,12 @@ function Content() {
   if (!settings) return <PanelSection title={t("loading")} />;
 
   if (showWizard) {
-    return <SetupWizard onDone={refresh} />;
+    return (
+      <SetupWizard
+        onDone={refresh}
+        onCancel={status?.configured ? () => setShowWizard(false) : undefined}
+      />
+    );
   }
 
   const patch = async (p: Partial<Settings>) => {
@@ -308,7 +326,17 @@ function Content() {
 
   return (
     <>
-      <PanelSection title="Deckygram">
+      <PanelSection>
+        {status?.update_available ? (
+          <PanelSectionRow>
+            <ButtonItem
+              layout="below"
+              onClick={() => { if (status.url) Navigation.NavigateToExternalWeb(status.url); }}
+            >
+              {t("update_available", { v: status.latest })} — {t("open_release")}
+            </ButtonItem>
+          </PanelSectionRow>
+        ) : null}
         <PanelSectionRow>
           <ToggleField
             label={t("send_to_telegram")}
@@ -317,6 +345,11 @@ function Content() {
             onChange={async (v) => { await setEnabled(v); refresh(); }}
           />
         </PanelSectionRow>
+        {status && status.ffmpeg_ok === false ? (
+          <PanelSectionRow>
+            <Field description={t("ffmpeg_missing")} />
+          </PanelSectionRow>
+        ) : null}
         <PanelSectionRow>
           <Field description={t("only_new_note")} />
         </PanelSectionRow>
@@ -412,6 +445,9 @@ function Content() {
           <ButtonItem layout="below" onClick={() => setShowWizard(true)}>
             {t("rerun_setup")} ({settings.token_hint || t("no_token")})
           </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <Field label={t("version")} description={"v" + (status?.version ?? "?")} />
         </PanelSectionRow>
       </PanelSection>
     </>

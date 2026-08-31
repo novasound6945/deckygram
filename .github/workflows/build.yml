@@ -62,6 +62,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" "${ZIP_NAME}" \
-            --title "Deckygram ${GITHUB_REF_NAME}" \
-            --generate-notes
+          # Two assets per release:
+          #   Deckygram-vX.Y.Z.zip  - versioned, for humans and archives
+          #   Deckygram.zip         - constant name, so the STABLE url
+          #     releases/latest/download/Deckygram.zip always works for
+          #     Decky's "Install plugin from URL".
+          cp "${ZIP_NAME}" Deckygram.zip
+          # Idempotent: re-pushing an existing tag (e.g. after a history
+          # rewrite) refreshes the assets instead of failing on "already exists".
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${ZIP_NAME}" Deckygram.zip --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${ZIP_NAME}" Deckygram.zip \
+              --title "Deckygram ${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi

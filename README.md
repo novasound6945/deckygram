@@ -14,6 +14,14 @@
 
 [English](#english) · [한국어](#한국어)
 
+<table><tr>
+<td><img src="docs/panel-main.jpg" alt="Deckygram panel in Game Mode" width="420"/></td>
+<td><img src="docs/panel-wizard-qr.jpg" alt="QR pairing wizard" width="420"/></td>
+</tr><tr>
+<td align="center"><sub>Quick Access panel / 퀵 액세스 패널</sub></td>
+<td align="center"><sub>QR pairing — scan with your phone / 폰으로 찍는 QR 페어링</sub></td>
+</tr></table>
+
 </div>
 
 ---
@@ -32,14 +40,23 @@
 | 📵 **Offline-safe** | Taken offline? Queued and delivered automatically when you're back online. |
 | 🧹 **Optional cleanup** | Sent media can be deleted from the Deck to free space. |
 
-### 📦 Install (ZIP)
+### 📦 Install
 
-1. Download **`Deckygram-vX.Y.Z.zip`** from the [**latest release**](https://github.com/novasound6945/deckygram/releases/latest).
-2. In Decky settings ⚙️ enable **Developer mode**, then
-   **Developer → Install plugin from ZIP file** and pick the zip.
-   <sub>(or unpack it into `~/homebrew/plugins/` and restart Decky Loader)</sub>
-3. Open **Deckygram** in the Quick Access menu (…) — the setup wizard
-   takes it from there.
+**Easiest — install from URL.** In Decky settings ⚙️ enable
+**Developer mode**, then **Developer → Install plugin from URL** and
+paste this (it always points at the newest release):
+
+```
+https://github.com/novasound6945/deckygram/releases/latest/download/Deckygram.zip
+```
+
+**Or from a ZIP file**: download **`Deckygram-vX.Y.Z.zip`** from the
+[latest release](https://github.com/novasound6945/deckygram/releases/latest),
+then **Developer → Install plugin from ZIP file**.
+<sub>(or unpack it into `~/homebrew/plugins/` and restart Decky Loader)</sub>
+
+Then open **Deckygram** in the Quick Access menu (…) — the setup wizard
+takes it from there.
 
 ### 📱 Setup — bring your phone
 
@@ -56,11 +73,29 @@ gallery is never touched.
 
 ### ⚙️ Good to know
 
+- **Requirements**: a Steam Deck on stock SteamOS — nothing to install
+  separately. Clips additionally need Steam's **Game Recording** feature
+  turned on (Settings → Game Recording). `ffmpeg` ships with SteamOS; if
+  it's ever missing, the plugin says so and screenshots keep working.
+- Screenshot bursts arrive as **one album** (one notification), not a
+  ping per shot.
 - Clips too long to fit Telegram's 50 MB bot limit (~30 min+) are
   skipped up front — you'll get a toast.
 - Failed sends retry automatically (30 s backoff); the panel also has
   **Retry now** / **Skip queued** buttons.
+- The plugin checks GitHub for new releases and shows an update button —
+  ZIP installs don't update themselves.
 - UI follows your Steam language (English / 한국어 today — PRs welcome).
+
+### 🔧 Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| Pairing page won't open on the phone | Phone and Deck must be on the **same Wi-Fi**; router "AP/client isolation" blocks it. Use *Type the token manually* as fallback. |
+| "Invalid token" | Copy the whole token from BotFather (`123456:ABC...`), no spaces. |
+| "no message yet" | Open your bot in Telegram and press **START**, then tap detect again. |
+| Clips never send | Steam **Game Recording** must be enabled; clips over ~30 min can't fit 50 MB and are skipped (toast shown). |
+| Anything else | Logs live in `~/homebrew/logs/Deckygram/` — attach the newest file to a GitHub issue along with the version shown in the panel. |
 
 ---
 
@@ -78,14 +113,23 @@ gallery is never touched.
 | 📵 **오프라인 안전** | 오프라인일 때 찍은 건 대기해 두었다가 온라인 복귀 시 자동 전송됩니다. |
 | 🧹 **선택적 정리** | 보낸 미디어를 덱에서 자동 삭제해 공간을 확보할 수 있습니다. |
 
-### 📦 설치 (ZIP)
+### 📦 설치
 
-1. [**최신 릴리스**](https://github.com/novasound6945/deckygram/releases/latest)에서 **`Deckygram-vX.Y.Z.zip`** 을 내려받습니다.
-2. Decky 설정 ⚙️ 에서 **개발자 모드**를 켜고,
-   **개발자 → ZIP 파일에서 플러그인 설치**로 zip을 선택합니다.
-   <sub>(또는 `~/homebrew/plugins/` 에 직접 풀고 Decky Loader 재시작)</sub>
-3. 퀵 액세스 메뉴(…)에서 **Deckygram** 을 열면 설정 마법사가
-   안내합니다.
+**가장 쉬운 방법 — URL로 설치.** Decky 설정 ⚙️ 에서 **개발자 모드**를
+켜고, **개발자 → URL에서 플러그인 설치**에 아래 주소를 붙여넣으세요
+(항상 최신 릴리스를 가리킵니다):
+
+```
+https://github.com/novasound6945/deckygram/releases/latest/download/Deckygram.zip
+```
+
+**또는 ZIP 파일로**: [최신 릴리스](https://github.com/novasound6945/deckygram/releases/latest)에서
+**`Deckygram-vX.Y.Z.zip`** 을 받아 **개발자 → ZIP 파일에서 플러그인
+설치**로 선택합니다.
+<sub>(또는 `~/homebrew/plugins/` 에 직접 풀고 Decky Loader 재시작)</sub>
+
+설치 후 퀵 액세스 메뉴(…)에서 **Deckygram** 을 열면 설정 마법사가
+안내합니다.
 
 ### 📱 설정 — 폰만 있으면 됩니다
 
@@ -102,11 +146,29 @@ gallery is never touched.
 
 ### ⚙️ 알아두면 좋은 것
 
+- **요구사항**: 순정 SteamOS 스팀덱이면 끝 — 따로 설치할 게 없습니다.
+  클립 전송은 스팀의 **게임 녹화** 기능이 켜져 있어야 합니다
+  (설정 → 게임 녹화). `ffmpeg`는 SteamOS에 기본 포함이며, 혹시 없으면
+  플러그인이 알려주고 스크린샷 전송은 계속 동작합니다.
+- 연속 스크린샷은 **앨범 하나**(알림 1번)로 도착합니다 — 장마다
+  울리지 않습니다.
 - 텔레그램 봇 한도(50MB)에 맞출 수 없는 긴 클립(약 30분+)은 처음부터
   건너뛰고 토스트로 알려줍니다.
 - 전송 실패는 30초 간격으로 자동 재시도되고, 패널에
   **지금 재시도** / **건너뛰기** 버튼도 있습니다.
+- 새 릴리스가 나오면 패널에 업데이트 버튼이 표시됩니다 — ZIP 설치는
+  스스로 갱신되지 않으니까요.
 - UI는 스팀 언어를 따라갑니다 (현재 영어/한국어 — 번역 PR 환영).
+
+### 🔧 문제 해결
+
+| 증상 | 확인할 것 |
+|---|---|
+| 폰에서 페어링 페이지가 안 열림 | 폰과 덱이 **같은 와이파이**여야 합니다. 공유기의 "AP 격리/기기 간 통신 차단"이 막을 수 있어요. 안 되면 *토큰 직접 입력*으로. |
+| "잘못된 토큰" | BotFather가 준 토큰 전체(`123456:ABC...`)를 공백 없이 복사했는지 확인. |
+| "아직 메시지가 없습니다" | 텔레그램에서 내 봇을 열어 **시작**을 누른 뒤 다시 감지. |
+| 클립이 전혀 안 옴 | 스팀 **게임 녹화** 기능이 켜져 있어야 합니다. 30분 넘는 클립은 50MB에 못 맞춰 건너뜁니다(토스트 표시). |
+| 그 외 | 로그는 `~/homebrew/logs/Deckygram/` 에 있습니다 — 최신 파일과 패널의 버전을 GitHub 이슈에 첨부해 주세요. |
 
 ---
 
@@ -134,3 +196,16 @@ returned to the UI in full. Telegram compresses inline photos; originals
 stay on the Deck unless delete-after-send is enabled.
 
 </details>
+
+---
+
+<div align="center">
+<sub>
+Built by <a href="https://github.com/novasound6945">kissos</a> together with
+<b>Claude (Fable 5)</b> by Anthropic — designed, written and field-tested on a
+real Steam Deck in one long pair-programming session.<br>
+<a href="https://github.com/novasound6945">kissos</a>가 Anthropic의
+<b>Claude (Fable 5)</b>와 함께 만들었습니다 — 실제 스팀덱 위에서 설계·구현·검증한
+페어 프로그래밍의 결과물입니다.
+</sub>
+</div>

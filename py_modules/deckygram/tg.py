@@ -94,7 +94,7 @@ def _multipart(fields: dict, files: dict):
 
 
 def api_call(token: str, method: str, fields: dict = None, files: dict = None,
-             timeout: int = 300) -> dict:
+             timeout: int = 600) -> dict:
     url = API % (token, method)
     if files:
         body, ctype = _multipart(fields or {}, files)
@@ -157,6 +157,7 @@ def _run_ffmpeg(cmd, duration: int, progress=None) -> bool:
     (microseconds of output written); against the known source duration
     that yields a live percentage.
     """
+    proc = None
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.DEVNULL, text=True)
@@ -180,10 +181,11 @@ def _run_ffmpeg(cmd, duration: int, progress=None) -> bool:
         proc.wait(timeout=1800)
         return proc.returncode == 0
     except Exception:
-        try:
-            proc.kill()
-        except Exception:
-            pass
+        if proc is not None:
+            try:
+                proc.kill()
+            except Exception:
+                pass
         return False
 
 
@@ -327,6 +329,34 @@ def send_media(token: str, chat_id: str, path: str, caption: str,
                 os.unlink(cleanup)
             except OSError:
                 pass
+
+
+def send_photo_album(token: str, chat_id: str, paths: list, caption: str) -> None:
+    """Send up to 10 photos as ONE album (one notification on the phone).
+
+    A screenshot burst would otherwise ping the phone once per shot.
+    Telegram's sendMediaGroup takes a JSON media array whose items
+    reference the multipart files via attach://<name>; only the first
+    item's caption is shown for the album.
+    """
+    if not paths:
+        return
+    if len(paths) == 1:
+        send_media(token, chat_id, paths[0], caption)
+        return
+
+    media = []
+    files = {}
+    for i, p in enumerate(paths[:10]):
+        name = "photo%d" % i
+        item = {"type": "photo", "media": "attach://" + name}
+        if i == 0:
+            item["caption"] = caption
+        media.append(item)
+        files[name] = p
+
+    api_call(token, "sendMediaGroup",
+             {"chat_id": chat_id, "media": json.dumps(media)}, files)
 
 
 # ----------------------------------------------------------------- onboarding

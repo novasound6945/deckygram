@@ -52,23 +52,23 @@ _FORM = """
 <h2>Deckygram</h2>
 <p class="sub">Steam Deck pairing / 스팀덱 연결</p>
 <ol>
- <li>In Telegram, open <b>@BotFather</b> &rarr; send <code>/newbot</code><br>
-     텔레그램에서 <b>@BotFather</b>에게 <code>/newbot</code> 전송
+ <li>Open <b>@BotFather</b>'s profile below, tap the big
+     <b>Open App</b> button, then choose <b>New bot</b>
+     (or just send <code>/newbot</code> in chat)<br>
+     아래 버튼으로 <b>@BotFather</b> 프로필을 열고, 큰
+     <b>앱 열기</b> 버튼 &rarr; <b>New bot</b> 을 선택하세요
+     (채팅으로 <code>/newbot</code> 도 가능)
      <a class="btn2" target="_blank" rel="noopener"
-        href="https://t.me/BotFather">Open @BotFather / 봇파더 열기</a></li>
- <li><b>Display name</b> - the title shown at the top of the chat.
-     Anything goes, duplicates are fine. e.g. <code>My Deck</code><br>
-     <b>대표 이름</b> - 대화방 상단에 뜨는 이름. 아무거나 되고
-     중복도 됩니다. 예: <code>내 스팀덱</code></li>
- <li><b>Username</b> - the unique @handle. Must <b>end in
-     &quot;bot&quot;</b> and be unused by anyone; if BotFather says
-     &quot;already taken&quot;, just try another.
-     e.g. <code>mydeck_shot_bot</code><br>
-     <b>아이디</b> - 전 세계에서 유일해야 하는 @주소. 반드시
-     <b>bot으로 끝나야</b> 하고, &quot;already taken&quot;이 뜨면
-     다른 이름으로 다시 시도하세요. 예: <code>mydeck_shot_bot</code></li>
- <li>Long-press the token BotFather sends and copy it<br>
-     BotFather가 준 토큰을 길게 눌러 복사</li>
+        href="https://t.me/BotFather?profile">Open @BotFather / 봇파더 열기</a></li>
+ <li>Fill in the form / 폼을 채웁니다:<br>
+     &bull; <b>Bot Name</b> - anything, duplicates fine
+     / <b>이름</b>은 아무거나, 중복 가능<br>
+     &bull; <b>Username</b> - must <b>end in &quot;bot&quot;</b> and be
+     unused by anyone; if taken, try another. e.g. <code>mydeck_shot_bot</code><br>
+     &nbsp;&nbsp;<b>아이디</b>는 반드시 <b>bot으로 끝나야</b> 하고 전 세계에서
+     유일해야 합니다. 중복이면 다른 이름으로. 예: <code>mydeck_shot_bot</code></li>
+ <li>Tap <b>Create Bot</b>, then long-press the token it shows and copy it<br>
+     <b>Create Bot</b>을 누르고, 표시된 토큰을 길게 눌러 복사하세요</li>
 </ol>
 <form method="post">
  <input name="token" placeholder="123456789:ABC..." autocomplete="off" autofocus>
