@@ -6,6 +6,6 @@
   "publish": {
     "tags": ["telegram", "screenshots", "clips", "sharing"],
     "description": "Screenshots and recorded clips fly straight to your Telegram the moment you take them - with the game's name as the caption. Clips are exported and compressed automatically (hardware H.265, no game slowdown). No cloud account, no server: just your own Telegram bot.",
-    "image": "https://raw.githubusercontent.com/deckygram/deckygram/main/assets/logo.png"
+    "image": "https://raw.githubusercontent.com/novasound6945/deckygram/main/assets/logo.png"
   }
 }
