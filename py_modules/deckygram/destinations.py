@@ -9,7 +9,7 @@ Everything above this layer (the watcher, the sender) talks to a
 Destination and never to a specific service.
 """
 
-from . import discord, tg
+from . import discord, media, tg
 from .errors import Unsendable   # noqa: F401  (re-exported for callers)
 
 TELEGRAM = "telegram"
@@ -21,8 +21,22 @@ class Destination:
 
     name = ""
 
+    def __init__(self, settings: dict):
+        self.preset_name = settings.get("clip_preset") or media.DEFAULT_PRESET
+        self.preset = media.preset(self.preset_name)
+
     def configured(self) -> bool:
         raise NotImplementedError
+
+    def max_clip_seconds(self) -> int:
+        """Longest clip this destination will take under the chosen preset."""
+        return media.max_seconds(self.size_target(), self.preset["floor"])
+
+    def encode_args(self) -> dict:
+        """Bitrate ceiling / frame height the preset asks for."""
+        return {"bitrate": self.preset["ceiling"],
+                "maxh": self.preset["height"],
+                "floor": self.preset["floor"]}
 
     def hopeless(self, duration_sec: int) -> bool:
         """True when a clip of this length cannot fit, however encoded."""
@@ -47,6 +61,7 @@ class Telegram(Destination):
     name = TELEGRAM
 
     def __init__(self, settings: dict):
+        super().__init__(settings)
         self.token = settings.get("token") or ""
         self.chat_id = settings.get("chat_id") or ""
 
@@ -54,12 +69,13 @@ class Telegram(Destination):
         return bool(self.token and self.chat_id)
 
     def hopeless(self, duration_sec):
-        return tg.hopeless(duration_sec)
+        return tg.hopeless(duration_sec, self.preset["floor"])
 
     def size_target(self):
         return tg.SIZE_TARGET
 
     def send(self, path, caption, **kw):
+        kw.update(self.encode_args())
         tg.send_media(self.token, self.chat_id, path, caption, **kw)
 
     def send_album(self, paths, caption, **kw):
@@ -76,18 +92,27 @@ class Discord(Destination):
     name = DISCORD
 
     def __init__(self, settings: dict):
+        super().__init__(settings)
         self.url = (settings.get("webhook_url") or "").strip()
 
     def configured(self):
         return discord.valid_url(self.url)
 
     def hopeless(self, duration_sec):
-        return discord.hopeless(duration_sec)
+        return discord.hopeless(duration_sec, self.preset["floor"])
 
     def size_target(self):
         return discord.SIZE_TARGET
 
+    def encode_args(self):
+        args = super().encode_args()
+        # A ninth of the budget: the frame has to come down further than
+        # the shared preset asks for.
+        args["maxh"] = min(args["maxh"], discord.height_cap(self.preset_name))
+        return args
+
     def send(self, path, caption, **kw):
+        kw.update(self.encode_args())
         discord.send_media(self.url, path, caption, **kw)
 
     def send_album(self, paths, caption, **kw):

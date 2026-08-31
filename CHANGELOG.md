@@ -2,6 +2,47 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.2.1
+
+### Added / 추가
+- **Clip quality presets.** A clip has a fixed size budget, so quality and
+  length trade against each other; rather than ask for numbers nobody can
+  judge, there are now three points on that curve — *Quality first*,
+  *Balanced* (default) and *Length first*. The panel shows the longest
+  clip the current choice will take.
+  **클립 화질 프리셋.** 클립은 용량 상한이 정해져 있어 화질과 길이가 서로
+  맞바꿔집니다. 숫자를 직접 고르게 하는 대신 *화질 우선* / *균형*(기본) /
+  *길이 우선* 세 가지를 제공하며, 현재 설정으로 보낼 수 있는 최대 길이를
+  패널에 표시합니다.
+
+| Preset / 프리셋 | Bitrate | Height | Telegram | Discord |
+|---|---|---|---|---|
+| Quality first / 화질 우선 | 3 Mbps | 800p (480p) | 6m07s | 1m13s |
+| **Balanced / 균형** | 2 Mbps | 600p (480p) | 11m54s | 2m22s |
+| Length first / 길이 우선 | 1.2 Mbps | 480p (360p) | 19m10s | 3m50s |
+
+- Short clips now get a **higher bitrate**. The old fixed 2 Mbps cap left
+  quality on the table: at a minute, Telegram's budget affords about
+  6 Mbps, so the ceiling was raised (to 3 Mbps — beyond that H.265 stops
+  paying for itself on an 800p capture).
+  짧은 클립에 **더 높은 비트레이트**를 씁니다. 기존 2Mbps 고정은 여유
+  예산을 놀리고 있었습니다(1분이면 텔레그램은 약 6Mbps까지 가능).
+
+### Changed / 변경
+- The status section lists **what's queued above what's being worked on**,
+  so reading it top to bottom follows the media instead of jumping back.
+  While a clip is encoding, the panel says so — it is not stuck.
+  상태 영역에서 **대기 항목을 작업 중보다 위에** 배치했습니다. 클립을
+  인코딩하는 중에는 그 사실을 안내합니다 — 멈춘 게 아닙니다.
+
+### Fixed / 수정
+- **The documented clip limit was wrong.** The README said Telegram took
+  clips up to ~30 minutes; measured, the real cutoff was ~12 minutes. The
+  figures now come from the same maths the plugin uses.
+  **문서의 클립 길이 한계가 틀렸습니다.** README에 텔레그램 약 30분까지로
+  적혀 있었으나 실제로는 약 12분이었습니다. 이제 플러그인이 쓰는 계산과
+  같은 값을 표기합니다.
+
 ## v0.2.0
 
 ### Added / 추가

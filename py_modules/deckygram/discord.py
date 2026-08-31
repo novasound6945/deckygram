@@ -36,8 +36,18 @@ URL_RE = re.compile(
 # no way to find that out before uploading.
 SIZE_LIMIT = 10 * 1024 * 1024
 SIZE_TARGET = 9 * 1024 * 1024    # headroom for the multipart envelope
-MAX_HEIGHT = 480                 # smaller frame to spend the bitrate better
 MAX_FILES = 10                   # per message, matching our album size
+
+# A ninth of Telegram's budget, so the frame has to come down further than
+# the shared presets ask for: a minute here affords ~1.1 Mbit/s, which
+# 480p spends well and 800p would not.  The longest preset drops again,
+# because by then there is under half a megabit to go around.
+HEIGHT_CAP = {"quality": 480, "balanced": 480, "reach": 360}
+MAX_HEIGHT = 480
+
+
+def height_cap(preset_name) -> int:
+    return HEIGHT_CAP.get(preset_name or "balanced", MAX_HEIGHT)
 
 
 def valid_url(url: str) -> bool:
@@ -84,13 +94,14 @@ def _json_str(s: str) -> str:
     return json.dumps(s or "")
 
 
-def hopeless(duration_sec: int) -> bool:
-    return media.hopeless(SIZE_TARGET, duration_sec)
+def hopeless(duration_sec: int, floor: int = media.MIN_BITRATE) -> bool:
+    return media.hopeless(SIZE_TARGET, duration_sec, floor)
 
 
 def send_media(url: str, path: str, caption: str, bitrate: int = 2_000_000,
                fps: int = 30, maxh: int = MAX_HEIGHT,
-               progress=None, phase=None) -> None:
+               progress=None, phase=None,
+               floor: int = media.MIN_BITRATE) -> None:
     """Send one file. Images go as-is; videos are compressed to fit."""
     ext = os.path.splitext(path)[1].lower()
     cleanup = None
@@ -98,7 +109,8 @@ def send_media(url: str, path: str, caption: str, bitrate: int = 2_000_000,
         if ext in media.VIDEO_EXT:
             send_path, cleanup = media.prepare_video(
                 path, SIZE_LIMIT, SIZE_TARGET, bitrate, fps,
-                min(maxh or MAX_HEIGHT, MAX_HEIGHT), progress, phase)
+                min(maxh or MAX_HEIGHT, MAX_HEIGHT), progress, phase,
+                floor=floor)
             # Encoding is done; the upload that follows has no percentage.
             if progress:
                 progress(-1)

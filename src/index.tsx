@@ -1,5 +1,6 @@
 import {
   ButtonItem,
+  DropdownItem,
   Navigation,
   PanelSection,
   PanelSectionRow,
@@ -69,6 +70,7 @@ type Settings = {
   enabled: boolean;
   send_screenshots: boolean;
   send_clips: boolean;
+  clip_preset: ClipPreset;
   notify_on_send: boolean;
   delete_after_send: boolean;
 };
@@ -89,6 +91,7 @@ type Status = {
   queued_clips_bytes: number;
   configured: boolean;
   destination: Destination;
+  max_clip_seconds: number;
   enabled: boolean;
   version: string;
   ffmpeg_ok: boolean;
@@ -98,6 +101,18 @@ type Status = {
   latest: string;
   url: string;
 };
+
+const CLIP_PRESETS = ["quality", "balanced", "reach"] as const;
+type ClipPreset = (typeof CLIP_PRESETS)[number];
+
+/** "6m 07s" / "73s" — the longest clip the current preset will take. */
+function humanMinutes(seconds: number): string {
+  if (!seconds) return "-";
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s ? `${m}m ${String(s).padStart(2, "0")}s` : `${m}m`;
+}
 
 function humanSize(bytes: number): string {
   if (!bytes) return "0 B";
@@ -470,6 +485,19 @@ function Content() {
           <ToggleField label={t("recorded_clips")} checked={settings.send_clips}
             onChange={(v) => patch({ send_clips: v })} />
         </PanelSectionRow>
+        {settings.send_clips ? (
+          <PanelSectionRow>
+            <DropdownItem
+              label={t("clip_preset")}
+              description={t("clip_preset_desc", {
+                len: humanMinutes(status?.max_clip_seconds ?? 0),
+              })}
+              rgOptions={CLIP_PRESETS.map((p) => ({ data: p, label: t(`preset_${p}`) }))}
+              selectedOption={settings.clip_preset}
+              onChange={(o) => patch({ clip_preset: o.data as ClipPreset })}
+            />
+          </PanelSectionRow>
+        ) : null}
         <PanelSectionRow>
           <ToggleField label={t("notify_toggle")} checked={settings.notify_on_send}
             onChange={(v) => patch({ notify_on_send: v })} />
@@ -485,16 +513,9 @@ function Content() {
       </PanelSection>
 
       <PanelSection title={t("status")}>
-        <PanelSectionRow>
-          <Field
-            label={t("now_working")}
-            description={
-              status?.current
-                ? status.current + (status.progress >= 0 ? ` (${status.progress}%)` : "")
-                : t("idle")
-            }
-          />
-        </PanelSectionRow>
+        {/* Queue first, then what is being worked on: the queue is what
+            the item currently sending came out of, so reading top to
+            bottom follows the media rather than jumping back. */}
         {status && status.queued > 0 ? (
           <>
             <PanelSectionRow>
@@ -522,6 +543,23 @@ function Content() {
               </ButtonItem>
             </PanelSectionRow>
           </>
+        ) : null}
+        <PanelSectionRow>
+          <Field
+            label={t("now_working")}
+            description={
+              status?.current
+                ? status.current + (status.progress >= 0 ? ` (${status.progress}%)` : "")
+                : t("idle")
+            }
+          />
+        </PanelSectionRow>
+        {/* Encoding a clip takes a little while and reports its own
+            percentage; without a word here the panel looks stuck. */}
+        {status?.current?.startsWith("Encoding") ? (
+          <PanelSectionRow>
+            <Field description={t("encoding_note")} />
+          </PanelSectionRow>
         ) : null}
         <PanelSectionRow>
           <ButtonItem layout="below" onClick={() => getStatus().then(setStatus)}>

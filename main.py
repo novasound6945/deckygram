@@ -37,9 +37,10 @@ DEFAULTS = {
     "send_screenshots": True,
     "send_clips": True,
     "notify_on_send": True,
-    "video_bitrate": 2_000_000,
+    # How much of the size budget to spend on quality vs length; the
+    # bitrate ceiling and frame height come from this (see media.PRESETS).
+    "clip_preset": "balanced",
     "video_fps": 30,
-    "video_maxh": 600,
     "delete_after_send": False,
 
 }
@@ -219,8 +220,10 @@ class Plugin:
         except Exception:
             st["queued"] = 0
         s = self._load()
-        st["configured"] = destinations.build(s).configured()
+        dest = destinations.build(s)
+        st["configured"] = dest.configured()
         st["destination"] = s.get("destination", "telegram")
+        st["max_clip_seconds"] = dest.max_clip_seconds()
         st["enabled"] = s["enabled"]
         return st
 

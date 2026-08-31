@@ -56,6 +56,14 @@ const en: Dict = {
   screenshots: "Screenshots",
   recorded_clips: "Recorded clips",
   notify_toggle: "Show a toast for each send",
+  clip_preset: "Clip quality",
+  clip_preset_desc:
+    "A clip has a fixed size budget, so quality and length trade against each other. Currently sending clips up to {len}; longer ones are skipped.",
+  preset_quality: "Quality first (shorter clips)",
+  preset_balanced: "Balanced",
+  preset_reach: "Length first (rougher video)",
+  encoding_note:
+    "Clips are compressed on the Deck's hardware encoder before sending - usually a few seconds, longer for long clips.",
   only_new_note:
     "Only media captured while sending is ON gets sent - anything taken while paused stays on the Deck. If you're offline, sends are retried automatically once you're back online. Clips too long to fit under Telegram's 50 MB bot limit are skipped (you'll get a toast).",
   delete_after: "Delete from Deck after sending",
@@ -150,6 +158,14 @@ const ko: Dict = {
   screenshots: "스크린샷",
   recorded_clips: "녹화 클립",
   notify_toggle: "전송 결과 알림 표시",
+  clip_preset: "클립 화질",
+  clip_preset_desc:
+    "클립은 용량 상한이 정해져 있어 화질과 길이가 서로 맞바꿔집니다. 현재 {len} 이하 클립을 전송하며, 더 긴 것은 건너뜁니다.",
+  preset_quality: "화질 우선 (짧은 클립만)",
+  preset_balanced: "균형",
+  preset_reach: "길이 우선 (화질 거침)",
+  encoding_note:
+    "클립은 전송 전에 덱의 하드웨어 인코더로 압축합니다 - 보통 몇 초, 긴 클립은 더 걸립니다.",
   only_new_note:
     "전송이 켜져 있는 동안 찍은 것만 보냅니다 - 꺼져 있는 동안 찍은 미디어는 기기에만 남습니다. 오프라인이면 온라인 복귀 후 자동으로 재시도해 보냅니다. 텔레그램 봇 한도(50MB)에 맞출 수 없는 긴 클립은 건너뛰며, 토스트로 알려드립니다.",
   delete_after: "보낸 뒤 기기에서 삭제",

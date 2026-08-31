@@ -150,8 +150,8 @@ class Watcher:
             except OSError:
                 pass
 
-        s = self.get_settings()
-        vbr = int(s.get("video_bitrate", 2_000_000))
+        dest = self.sender.destination()
+        vbr = dest.encode_args()["bitrate"]
         clip_n = clip_b = 0
         for d in self._all_clip_dirs():
             if os.path.basename(d) in self.qs.clips_done:
@@ -160,7 +160,7 @@ class Watcher:
             dur = self.sender.clip_duration(d)
             if dur > 0:
                 est = dur * (vbr + 96_000) // 8
-                clip_b += min(est, self.sender.destination().size_target())
+                clip_b += min(est, dest.size_target())
 
         result = {
             "queued": img_n + clip_n,

@@ -111,8 +111,23 @@ nowhere near the limit.</sub>
   working.
 - Screenshot bursts arrive as **one album** (one notification), not a
   ping per shot.
-- Clips too long to fit Telegram's 50 MB bot limit (~30 min+) are
-  skipped up front — you'll get a toast.
+- Clips are compressed to fit, so length and quality trade against each
+  other. **Clip quality** picks where on that curve you sit — on the
+  default, Telegram takes clips up to ~12 minutes and Discord ~2m20s;
+  anything longer is skipped up front with a toast.
+  <details><summary>What each <b>Clip quality</b> preset gives you</summary>
+
+  | Preset | Bitrate ceiling | Height | Telegram | Discord |
+  |---|---|---|---|---|
+  | Quality first | 3 Mbps | 800p (480p) | up to 6m07s | up to 1m13s |
+  | **Balanced** | 2 Mbps | 600p (480p) | up to 11m54s | up to 2m22s |
+  | Length first | 1.2 Mbps | 480p (360p) | up to 19m10s | up to 3m50s |
+
+  Heights in brackets are what Discord uses — its budget is a ninth of
+  Telegram's, so the frame has to come down further to spend the bitrate
+  well. The ceiling only binds on short clips; longer ones are limited by
+  the size budget instead.
+  </details>
 - Failed sends retry automatically (30 s backoff, up to 5 attempts).
   After that Deckygram stops trying but **keeps the media** — press
   **Retry now** once the problem is fixed. If Telegram rejects the bot
@@ -130,7 +145,7 @@ nowhere near the limit.</sub>
 | Pairing page won't open on the phone | Phone and Deck must be on the **same Wi-Fi**; router "AP/client isolation" blocks it. Use *Type the token manually* as fallback. |
 | "Invalid token" | Copy the whole token from BotFather (`123456:ABC...`), no spaces. |
 | "no message yet" | Open your bot in Telegram and press **START**, then tap detect again. |
-| Clips never send | Settings → **Game Recording** must not be on *Never record* (background or manual recording both work) — and a clip only exists once you **save/stop** it. Clips over ~30 min can't fit 50 MB and are skipped (toast shown). |
+| Clips never send | Settings → **Game Recording** must not be on *Never record* (background or manual recording both work) — and a clip only exists once you **save/stop** it. Clips longer than the limit shown under **Clip quality** are skipped (toast shown). |
 | "Telegram rejected this bot" | The token was regenerated, the bot deleted, or you blocked it in Telegram. Press **Set up again**; queued media is kept and goes out once it works. |
 | "Discord rejected this webhook" | The webhook or its channel was deleted. Make a new webhook and press **Change destination**. |
 | Discord clips get skipped | A free server caps uploads at 10 MB, so clips over ~3 minutes can't fit. Boosting the server raises the cap. |
@@ -218,8 +233,22 @@ Nitro가 아니라 **서버** 기준). 그래서 클립을 더 세게 압축하�
   플러그인이 알려주고 스크린샷 전송은 계속 동작합니다.
 - 연속 스크린샷은 **앨범 하나**(알림 1번)로 도착합니다 — 장마다
   울리지 않습니다.
-- 텔레그램 봇 한도(50MB)에 맞출 수 없는 긴 클립(약 30분+)은 처음부터
-  건너뛰고 토스트로 알려줍니다.
+- 클립은 용량에 맞춰 압축되므로 길이와 화질이 서로 맞바꿔집니다.
+  **클립 화질** 설정으로 그 지점을 고릅니다 — 기본값 기준 텔레그램은
+  약 12분, 디스코드는 약 2분 20초까지 보내고, 더 길면 처음부터
+  건너뛰며 토스트로 알려줍니다.
+  <details><summary><b>클립 화질</b> 프리셋별 실제 값</summary>
+
+  | 프리셋 | 비트레이트 상한 | 해상도 | 텔레그램 | 디스코드 |
+  |---|---|---|---|---|
+  | 화질 우선 | 3 Mbps | 800p (480p) | 6분 07초까지 | 1분 13초까지 |
+  | **균형** | 2 Mbps | 600p (480p) | 11분 54초까지 | 2분 22초까지 |
+  | 길이 우선 | 1.2 Mbps | 480p (360p) | 19분 10초까지 | 3분 50초까지 |
+
+  괄호 안은 디스코드에서 쓰는 해상도입니다. 예산이 텔레그램의 9분의 1이라
+  같은 비트레이트를 제대로 쓰려면 화면을 더 줄여야 합니다. 상한은 짧은
+  클립에서만 걸리고, 긴 클립은 용량 예산이 먼저 제한합니다.
+  </details>
 - 전송 실패는 30초 간격으로 **최대 5회** 자동 재시도합니다. 그 뒤에는
   시도를 멈추지만 **미디어는 보관**하므로, 문제를 해결한 뒤
   **[지금 재시도]**를 누르면 전송됩니다. 텔레그램이 봇 자체를 거부하면
@@ -237,7 +266,7 @@ Nitro가 아니라 **서버** 기준). 그래서 클립을 더 세게 압축하�
 | 폰에서 페어링 페이지가 안 열림 | 폰과 덱이 **같은 와이파이**여야 합니다. 공유기의 "AP 격리/기기 간 통신 차단"이 막을 수 있어요. 안 되면 *토큰 직접 입력*으로. |
 | "잘못된 토큰" | BotFather가 준 토큰 전체(`123456:ABC...`)를 공백 없이 복사했는지 확인. |
 | "아직 메시지가 없습니다" | 텔레그램에서 내 봇을 열어 **시작**을 누른 뒤 다시 감지. |
-| 클립이 전혀 안 옴 | 설정 → **게임 녹화**가 *녹화 안 함*이면 안 됩니다(백그라운드·수동 녹화 모두 지원). 클립은 **저장/녹화 종료**해야 생깁니다. 30분 넘는 클립은 50MB에 못 맞춰 건너뜁니다(토스트 표시). |
+| 클립이 전혀 안 옴 | 설정 → **게임 녹화**가 *녹화 안 함*이면 안 됩니다(백그라운드·수동 녹화 모두 지원). 클립은 **저장/녹화 종료**해야 생깁니다. **클립 화질** 설정에 표시된 길이를 넘는 클립은 건너뜁니다(토스트 표시). |
 | "텔레그램이 이 봇을 거부했습니다" | 토큰이 재발급되었거나, 봇을 삭제했거나, 텔레그램에서 봇을 차단한 경우입니다. **다시 설정하기**를 누르세요. 대기 중이던 미디어는 보관되어 있다가 정상화되면 전송됩니다. |
 | "디스코드가 이 웹훅을 거부했습니다" | 웹훅이나 해당 채널이 삭제된 경우입니다. 웹훅을 새로 만든 뒤 **보낼 곳 바꾸기**를 누르세요. |
 | 디스코드에서 클립이 계속 건너뛰어짐 | 무료 서버는 업로드가 10MB로 제한되어 약 3분이 넘는 클립은 담을 수 없습니다. 서버를 부스트하면 한도가 올라갑니다. |

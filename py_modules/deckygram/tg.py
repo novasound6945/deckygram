@@ -37,8 +37,8 @@ def fit_bitrate(duration_sec: int, desired: int) -> int:
     return media.fit_bitrate(SIZE_TARGET, duration_sec, desired)
 
 
-def hopeless(duration_sec: int) -> bool:
-    return media.hopeless(SIZE_TARGET, duration_sec)
+def hopeless(duration_sec: int, floor: int = media.MIN_BITRATE) -> bool:
+    return media.hopeless(SIZE_TARGET, duration_sec, floor)
 
 
 # Telegram's errors are the shared ones; the old name stays as an alias
@@ -92,7 +92,8 @@ def api_call(token: str, method: str, fields: dict = None, files: dict = None,
 
 def send_media(token: str, chat_id: str, path: str, caption: str,
                bitrate: int = 2_000_000, fps: int = 30, maxh: int = 600,
-               progress=None, phase=None) -> None:
+               progress=None, phase=None,
+               floor: int = media.MIN_BITRATE) -> None:
     """Send one file. Raises TelegramError (retryable) or Unsendable (skip)."""
     ext = os.path.splitext(path)[1].lower()
     cleanup = None
@@ -108,7 +109,7 @@ def send_media(token: str, chat_id: str, path: str, caption: str,
         if ext in VIDEO_EXT:
             send_path, cleanup = media.prepare_video(
                 path, BOT_LIMIT, SIZE_TARGET, bitrate, fps, maxh,
-                progress, phase)
+                progress, phase, floor=floor)
             # Encoding is done; the upload that follows has no percentage,
             # so hide the number instead of freezing at 99%.
             if progress:

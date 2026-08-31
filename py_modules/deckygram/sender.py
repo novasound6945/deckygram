@@ -136,12 +136,11 @@ class Sender:
             label = "Encoding" if name == "encoding" else "Sending"
             self.status["current"] = "%s: %s" % (label, caption)
 
-        self.destination().send(
-            path, caption,
-            bitrate=int(s.get("video_bitrate", 2_000_000)),
-            fps=int(s.get("video_fps", 30)),
-            maxh=int(s.get("video_maxh", 600)),
-            progress=prog, phase=phase)
+        # Bitrate and frame height come from the destination's preset;
+        # only the frame rate is a plain setting.
+        self.destination().send(path, caption,
+                                fps=int(s.get("video_fps", 30)),
+                                progress=prog, phase=phase)
 
     def process_file(self, path):
         if path in self.qs.sent or not os.path.isfile(path):

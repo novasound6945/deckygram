@@ -33,6 +33,32 @@ VIDEO_EXT = {".mp4", ".mkv", ".webm", ".mov"}
 AUDIO_BITRATE = 128_000     # generous bound for the 96k AAC track + container
 MIN_BITRATE = 400_000       # below this the video is not worth watching
 
+# The one real tradeoff in clip sending: a fixed size budget buys either a
+# good-looking short clip or a rough long one.  Rather than ask people for
+# numbers they cannot judge, offer three points on that curve.
+#
+# ceiling  how much bitrate to spend when the budget is generous (short
+#          clips) - without it a 30 s clip on Telegram would use 2 Mbps
+#          out of the 12 it could afford
+# floor    how rough it may get before we give up and skip the clip
+# height   frame height cap
+# Tuned around the length people actually send - roughly a minute. At 60 s
+# Telegram's budget affords ~6 Mbit/s, but H.265 stops paying for itself
+# well before that on an 800p capture, so the ceiling stops at 3 Mbit/s
+# rather than spending the whole budget for no visible gain.
+# Destinations may cap the height further: see discord.HEIGHT_CAP.
+PRESETS = {
+    "quality":  {"ceiling": 3_000_000, "floor": 900_000, "height": 800},
+    "balanced": {"ceiling": 2_000_000, "floor": 400_000, "height": 600},
+    "reach":    {"ceiling": 1_200_000, "floor": 200_000, "height": 480},
+}
+DEFAULT_PRESET = "balanced"
+
+
+def preset(name) -> dict:
+    """Preset settings by name, falling back to balanced."""
+    return PRESETS.get(name or DEFAULT_PRESET, PRESETS[DEFAULT_PRESET])
+
 
 def fit_bitrate(size_target: int, duration_sec: int, desired: int) -> int:
     """Highest video bitrate that keeps `duration_sec` under `size_target`."""
@@ -40,10 +66,15 @@ def fit_bitrate(size_target: int, duration_sec: int, desired: int) -> int:
     return min(desired, fit)
 
 
-def hopeless(size_target: int, duration_sec: int) -> bool:
-    """True when no watchable bitrate can fit the clip under the limit."""
+def hopeless(size_target: int, duration_sec: int, floor: int = MIN_BITRATE) -> bool:
+    """True when nothing above `floor` can fit the clip under the limit."""
     return duration_sec > 0 and \
-        size_target * 8 // duration_sec - AUDIO_BITRATE < MIN_BITRATE
+        size_target * 8 // duration_sec - AUDIO_BITRATE < floor
+
+
+def max_seconds(size_target: int, floor: int = MIN_BITRATE) -> int:
+    """Longest clip that still fits above `floor` - quoted in the UI."""
+    return max(0, size_target * 8 // (floor + AUDIO_BITRATE))
 
 
 # ------------------------------------------------------------------- ffprobe
@@ -161,7 +192,8 @@ def _encode(src: str, dst: str, bitrate: int, fps: int, maxh: int,
 
 
 def prepare_video(path: str, hard_limit: int, size_target: int, bitrate: int,
-                  fps: int, maxh: int, progress=None, phase=None):
+                  fps: int, maxh: int, progress=None, phase=None,
+                  floor: int = MIN_BITRATE):
     """Return (path_to_send, temp_file_to_delete_or_None).
 
     Raises Unsendable when the file cannot be brought under the limit.
@@ -181,7 +213,7 @@ def prepare_video(path: str, hard_limit: int, size_target: int, bitrate: int,
     if size <= hard_limit and src_br <= target * 115 // 100:
         return path, None
 
-    if target < MIN_BITRATE:
+    if target < floor:
         raise Unsendable("video too long to fit at watchable quality")
 
     tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False, dir=TMP_DIR)
