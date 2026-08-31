@@ -15,12 +15,14 @@
 [English](#english) · [한국어](#한국어)
 
 <table><tr>
-<td><img src="docs/panel-main.jpg" alt="Deckygram panel in Game Mode" width="420"/></td>
+<td><img src="docs/panel-main-en.jpg" alt="Deckygram panel in Game Mode" width="420"/></td>
 <td><img src="docs/panel-wizard-qr.jpg" alt="QR pairing wizard" width="420"/></td>
 </tr><tr>
 <td align="center"><sub>Quick Access panel / 퀵 액세스 패널</sub></td>
 <td align="center"><sub>QR pairing — scan with your phone / 폰으로 찍는 QR 페어링</sub></td>
 </tr></table>
+
+<sub>UI follows your Steam language — shown here in English and 한국어.</sub>
 
 </div>
 
@@ -50,9 +52,9 @@ paste this (it always points at the newest release):
 https://github.com/novasound6945/deckygram/releases/latest/download/Deckygram.zip
 ```
 
-**Or from a ZIP file**: download **`Deckygram-vX.Y.Z.zip`** from the
-[latest release](https://github.com/novasound6945/deckygram/releases/latest),
-then **Developer → Install plugin from ZIP file**.
+**Or from a ZIP file** — then **Developer → Install plugin from ZIP file**:
+
+> 📥 **Download: [Latest release →](https://github.com/novasound6945/deckygram/releases/latest)** (`Deckygram-vX.Y.Z.zip`)
 <sub>(or unpack it into `~/homebrew/plugins/` and restart Decky Loader)</sub>
 
 Then open **Deckygram** in the Quick Access menu (…) — the setup wizard
@@ -123,9 +125,9 @@ gallery is never touched.
 https://github.com/novasound6945/deckygram/releases/latest/download/Deckygram.zip
 ```
 
-**또는 ZIP 파일로**: [최신 릴리스](https://github.com/novasound6945/deckygram/releases/latest)에서
-**`Deckygram-vX.Y.Z.zip`** 을 받아 **개발자 → ZIP 파일에서 플러그인
-설치**로 선택합니다.
+**또는 ZIP 파일로** — 받은 뒤 **개발자 → ZIP 파일에서 플러그인 설치**:
+
+> 📥 **다운로드: [최신 릴리스 →](https://github.com/novasound6945/deckygram/releases/latest)** (`Deckygram-vX.Y.Z.zip`)
 <sub>(또는 `~/homebrew/plugins/` 에 직접 풀고 Decky Loader 재시작)</sub>
 
 설치 후 퀵 액세스 메뉴(…)에서 **Deckygram** 을 열면 설정 마법사가
@@ -201,10 +203,10 @@ stay on the Deck unless delete-after-send is enabled.
 
 <div align="center">
 <sub>
-Built by <a href="https://github.com/novasound6945">kissos</a> together with
+Built by <a href="https://github.com/novasound6945">novasound6945</a> together with
 <b>Claude (Fable 5)</b> by Anthropic — designed, written and field-tested on a
 real Steam Deck in one long pair-programming session.<br>
-<a href="https://github.com/novasound6945">kissos</a>가 Anthropic의
+<a href="https://github.com/novasound6945">novasound6945</a>가 Anthropic의
 <b>Claude (Fable 5)</b>와 함께 만들었습니다 — 실제 스팀덱 위에서 설계·구현·검증한
 페어 프로그래밍의 결과물입니다.
 </sub>

@@ -71,7 +71,7 @@ _FORM = """
      <b>Create Bot</b>을 누르고, 표시된 토큰을 길게 눌러 복사하세요</li>
 </ol>
 <form method="post">
- <input name="token" placeholder="123456789:ABC..." autocomplete="off" autofocus>
+ <input name="token" placeholder="123456789:ABC..." autocomplete="off">
  <button type="submit">Connect / 연결</button>
 </form>
 {extra}
