@@ -30,6 +30,10 @@ class QueueState:
         self.no_album = set()    # paths that failed as an album once
         self.clip_retry_at = {}  # clip_id -> not-before timestamp
         self.attempts = {}       # item -> failed send count
+        # Picked by hand in the gallery: send these even though they are
+        # already in `sent` / `clips_done`.  Deliberately not persisted -
+        # a forced send is a one-off, not a standing instruction.
+        self.forced = set()
         # Items we stopped retrying automatically.  Persisted, because a
         # plugin restart seeds everything on disk as "already handled" -
         # without this list, media held back by a broken setup would be
@@ -62,12 +66,32 @@ class QueueState:
             self._record(self.clips_path, clip_id)
         self._forget(clip_id)
 
+    def force(self, item: str) -> None:
+        """Mark an item as chosen by hand, so the sent-already guard yields."""
+        with self.lock:
+            self.forced.add(item)
+
+    def is_forced(self, item: str) -> bool:
+        return item in self.forced
+
+    def unforce(self, item: str) -> None:
+        """Clear the one-off flag once the item is settled.
+
+        Clips need this explicitly: their persisted key is the folder
+        NAME while the queue and this flag use the full PATH, so
+        mark_clip_done() alone cannot clear it - and a forced clip whose
+        flag survives is re-sent on every ten-second scan, forever.
+        """
+        with self.lock:
+            self.forced.discard(item)
+
     def _forget(self, item: str) -> None:
         """Drop retry bookkeeping for an item that is now settled."""
         was_stalled = item in self.gave_up
         with self.lock:
             self.attempts.pop(item, None)
             self.gave_up.discard(item)
+            self.forced.discard(item)
         if was_stalled:
             self._rewrite_stalled()
 

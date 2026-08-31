@@ -14,12 +14,16 @@ import {
   removeEventListener,
   callable,
   definePlugin,
+  routerHook,
   toaster,
 } from "@decky/api";
 import { useEffect, useMemo, useState } from "react";
 import { FaTelegramPlane } from "react-icons/fa";
 import qrcode from "qrcode-generator";
+import { GalleryPage } from "./Gallery";
 import { t } from "./i18n";
+
+const GALLERY_ROUTE = "/deckygram/gallery";
 
 /** URL -> QR image (GIF data URL). White quiet zone so phone cameras lock on. */
 function QrImage({ text, loading }: { text: string; loading?: boolean }) {
@@ -66,6 +70,8 @@ function QrImage({ text, loading }: { text: string; loading?: boolean }) {
 type Settings = {
   token_hint: string;
   webhook_hint: string;
+  has_telegram: boolean;
+  has_discord: boolean;
   chat_id: string;
   enabled: boolean;
   send_screenshots: boolean;
@@ -150,6 +156,12 @@ const setEnabled = callable<[enabled: boolean], { ok: boolean; enabled: boolean 
 const getStatus = callable<[], Status>("get_status");
 const startPairing = callable<[mode: Destination], Pairing>("start_pairing");
 const setWebhook = callable<[url: string], { ok: boolean; error?: string }>("set_webhook");
+const setDestination = callable<
+  [dest: Destination], { ok: boolean; error?: string }
+>("set_destination");
+const forgetDestination = callable<
+  [dest: Destination], { ok: boolean; error?: string }
+>("forget_destination");
 const getPairing = callable<[], Pairing>("get_pairing");
 const stopPairing = callable<[], { ok: boolean }>("stop_pairing");
 const retryQueue = callable<[], { count: number }>("retry_queue");
@@ -171,7 +183,11 @@ const destBlurbDivider: React.CSSProperties = {
   marginBottom: 10,
 };
 
-function SetupWizard({ onDone, onCancel }: { onDone: () => void; onCancel?: () => void }) {
+function SetupWizard({ onDone, onCancel, settings }: {
+  onDone: () => void;
+  onCancel?: () => void;
+  settings?: Settings | null;
+}) {
   const [step, setStep] = useState<"where" | "pair" | "token" | "chat" | "test">("where");
   const [dest, setDest] = useState<Destination>("telegram");
   const [pairing, setPairing] = useState<Pairing | null>(null);
@@ -211,6 +227,18 @@ function SetupWizard({ onDone, onCancel }: { onDone: () => void; onCancel?: () =
     }, 2000);
     return () => { alive = false; clearInterval(timer); stopPairing(); };
   }, [step, dest]);
+
+  /** Already paired? Just switch. Otherwise start the pairing flow. */
+  const choose = async (d: Destination, ready: boolean) => {
+    if (ready) {
+      const r = await setDestination(d);
+      if (r.ok) { onDone(); return; }
+      setMsg(t("error_prefix") + (r.error ?? ""));
+      return;
+    }
+    setDest(d);
+    setStep("pair");
+  };
 
   const submitWebhook = async () => {
     setBusy(true);
@@ -272,14 +300,16 @@ function SetupWizard({ onDone, onCancel }: { onDone: () => void; onCancel?: () =
               choice away from its own description. Suppress it there and
               let the description carry the separator instead, so the line
               lands BETWEEN the two destinations. */}
+          {/* A destination that is already set up switches straight over;
+              only a fresh one starts the pairing flow. */}
           <PanelSectionRow>
             <div>
               <ButtonItem
                 layout="below"
                 bottomSeparator="none"
-                onClick={() => { setDest("telegram"); setStep("pair"); }}
+                onClick={() => choose("telegram", !!settings?.has_telegram)}
               >
-                {t("dest_telegram")}
+                {t(settings?.has_telegram ? "dest_telegram_ready" : "dest_telegram")}
               </ButtonItem>
               <div style={{ ...destBlurb, ...destBlurbDivider }}>
                 {t("dest_telegram_desc")}
@@ -291,9 +321,9 @@ function SetupWizard({ onDone, onCancel }: { onDone: () => void; onCancel?: () =
               <ButtonItem
                 layout="below"
                 bottomSeparator="none"
-                onClick={() => { setDest("discord"); setStep("pair"); }}
+                onClick={() => choose("discord", !!settings?.has_discord)}
               >
-                {t("dest_discord")}
+                {t(settings?.has_discord ? "dest_discord_ready" : "dest_discord")}
               </ButtonItem>
               <div style={destBlurb}>{t("dest_discord_desc")}</div>
             </div>
@@ -396,6 +426,8 @@ function Content() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  // Which destination's "forget" button is armed, if any.
+  const [forgetArmed, setForgetArmed] = useState<Destination | null>(null);
 
   const refresh = async () => {
     const [s, st] = await Promise.all([getSettings(), getStatus()]);
@@ -415,6 +447,7 @@ function Content() {
   if (showWizard) {
     return (
       <SetupWizard
+        settings={settings}
         onDone={refresh}
         onCancel={status?.configured ? () => setShowWizard(false) : undefined}
       />
@@ -424,6 +457,7 @@ function Content() {
   // Which service is configured decides a handful of labels and limits.
   // Everything else in the panel is identical, so this stays one panel.
   const onDiscord = status?.destination === "discord";
+  const activeDest: Destination = onDiscord ? "discord" : "telegram";
 
   const patch = async (p: Partial<Settings>) => {
     setSettings(await saveSettings(p));
@@ -432,6 +466,19 @@ function Content() {
   return (
     <>
       <PanelSection>
+        {/* First thing in the panel: the one action you come here to take
+            on purpose. Everything below it is settings and status. */}
+        <PanelSectionRow>
+          <ButtonItem
+            layout="below"
+            onClick={() => {
+              Navigation.CloseSideMenus();
+              Navigation.Navigate(GALLERY_ROUTE);
+            }}
+          >
+            {t("open_gallery")}
+          </ButtonItem>
+        </PanelSectionRow>
         {status?.setup_broken ? (
           <>
             <PanelSectionRow>
@@ -471,6 +518,22 @@ function Content() {
             <Field description={t("ffmpeg_missing")} />
           </PanelSectionRow>
         ) : null}
+        {/* Both credentials are stored side by side, so switching is one
+            press - no need to pair again. Only shown once the other side
+            has actually been set up. */}
+        {(onDiscord ? settings.has_telegram : settings.has_discord) && (
+          <PanelSectionRow>
+            <ButtonItem
+              layout="below"
+              onClick={async () => {
+                await setDestination(onDiscord ? "telegram" : "discord");
+                refresh();
+              }}
+            >
+              {t(onDiscord ? "switch_to_telegram" : "switch_to_discord")}
+            </ButtonItem>
+          </PanelSectionRow>
+        )}
         <PanelSectionRow>
           <Field description={t(onDiscord ? "only_new_note_dc" : "only_new_note")} />
         </PanelSectionRow>
@@ -592,13 +655,34 @@ function Content() {
         </PanelSectionRow>
         <PanelSectionRow>
           <ButtonItem layout="below" onClick={() => setShowWizard(true)}>
-            {onDiscord
-              ? `${t("rerun_setup_dc")} (${settings.webhook_hint || t("no_webhook")})`
-              : `${t("rerun_setup")} (${settings.token_hint || t("no_token")})`}
+            {`${t("rerun_setup")} (${onDiscord
+              ? settings.webhook_hint || t("no_webhook")
+              : settings.token_hint || t("no_token")})`}
           </ButtonItem>
         </PanelSectionRow>
+        {/* The token and webhook stay on the Deck until removed, so give
+            people a way to remove them. Two presses, because it cannot be
+            undone.
+
+            Steam scrolls only far enough to show the FOCUSED element, and
+            a Field cannot take focus - so anything unfocusable at the end
+            of the panel is unreachable and gets clipped. Carrying the
+            version on the last button keeps it visible. */}
         <PanelSectionRow>
-          <Field label={t("version")} description={"v" + (status?.version ?? "?")} />
+          <ButtonItem
+            layout="below"
+            onClick={async () => {
+              if (forgetArmed !== activeDest) { setForgetArmed(activeDest); return; }
+              await forgetDestination(activeDest);
+              setForgetArmed(null);
+              refresh();
+            }}
+            description={t("version") + " v" + (status?.version ?? "?")}
+          >
+            {forgetArmed === activeDest
+              ? t("forget_confirm")
+              : t(onDiscord ? "forget_discord" : "forget_telegram")}
+          </ButtonItem>
         </PanelSectionRow>
       </PanelSection>
     </>
@@ -613,6 +697,10 @@ export default definePlugin(() => {
     },
   );
 
+  // The picker needs room the Quick Access panel does not have, so it
+  // lives as its own full-screen route.
+  routerHook.addRoute(GALLERY_ROUTE, GalleryPage, { exact: true });
+
   return {
     name: "Deckygram",
     titleView: <div className={staticClasses.Title}>Deckygram</div>,
@@ -620,6 +708,7 @@ export default definePlugin(() => {
     icon: <FaTelegramPlane />,
     onDismount() {
       removeEventListener("deckygram_event", listener);
+      routerHook.removeRoute(GALLERY_ROUTE);
     },
   };
 });

@@ -143,11 +143,15 @@ class Sender:
                                 progress=prog, phase=phase)
 
     def process_file(self, path):
-        if path in self.qs.sent or not os.path.isfile(path):
+        forced = self.qs.is_forced(path)
+        if (path in self.qs.sent and not forced) or not os.path.isfile(path):
             return
         s = self.get_settings()
         ext = os.path.splitext(path)[1].lower()
-        if ext in media.IMAGE_EXT and not s.get("send_screenshots", True):
+        # A hand-picked item ignores the what-to-send toggles: choosing it
+        # in the gallery *is* the instruction.
+        if not forced and ext in media.IMAGE_EXT \
+                and not s.get("send_screenshots", True):
             return
         # Still being written (full scan can discover a file mid-write,
         # unlike the IN_CLOSE_WRITE inotify path): come back later.
@@ -260,6 +264,17 @@ class Sender:
 
     # ------------------------------------------------------------------- clips
 
+    def _finish_clip(self, clip_dir, clip_id):
+        """Settle a clip: persist it as done AND drop its in-memory flags.
+
+        The two are keyed differently - clips_done by folder NAME (it is
+        written to disk), the queue and the hand-picked flag by full PATH
+        - so clearing only the first left a forced clip re-sending on
+        every scan.
+        """
+        self.qs.mark_clip_done(clip_id)
+        self.qs.unforce(clip_dir)
+
     def clip_duration(self, clip_dir):
         """Seconds, read from the DASH manifest's mediaPresentationDuration.
 
@@ -280,12 +295,13 @@ class Sender:
         if not self.ffmpeg_ok:
             return
         clip_id = os.path.basename(clip_dir)
-        if clip_id in self.qs.clips_done:
+        forced = self.qs.is_forced(clip_dir)
+        if clip_id in self.qs.clips_done and not forced:
             return
-        if time.time() < self.qs.clip_retry_at.get(clip_id, 0):
+        if not forced and time.time() < self.qs.clip_retry_at.get(clip_id, 0):
             return   # backing off after a failure
         s = self.get_settings()
-        if not s.get("send_clips", True):
+        if not forced and not s.get("send_clips", True):
             return
         # Steam writes fragments into SUBdirectories, which does not bump
         # the top dir's mtime - judge "still being written" by the newest
@@ -306,7 +322,7 @@ class Sender:
             return  # still being written; next scan will retry
         mpds = glob.glob(os.path.join(clip_dir, "**", "session.mpd"), recursive=True)
         if not mpds:
-            self.qs.mark_clip_done(clip_id)
+            self._finish_clip(clip_dir, clip_id)
             return
 
         # Hopeless clips (too long to ever fit under the 50 MB bot limit,
@@ -314,7 +330,7 @@ class Sender:
         # remux on them.
         dur = self.clip_duration(clip_dir)
         if self.destination().hopeless(dur):
-            self.qs.mark_clip_done(clip_id)
+            self._finish_clip(clip_dir, clip_id)
             self.log("clip skipped up front (too long: %ds): %s" % (dur, clip_id))
             if s.get("notify_on_send", True):
                 self.notify("skipped", "Clip not sent",
@@ -339,7 +355,7 @@ class Sender:
                 return
             self.status["current"] = "Encoding & sending: %s" % caption
             self._send_file(tmp.name, caption)
-            self.qs.mark_clip_done(clip_id)
+            self._finish_clip(clip_dir, clip_id)
             self.qs.bump_sent()
             self.status["sent"] = self.qs.sent_count
             self.status["last_sent"] = caption
@@ -349,16 +365,16 @@ class Sender:
             if s.get("delete_after_send"):
                 self._delete_clip(clip_dir)
         except Unsendable as e:
-            self.qs.mark_clip_done(clip_id)
+            self._finish_clip(clip_dir, clip_id)
             self.log("clip skipped (%s): %s" % (e, clip_id))
             if s.get("notify_on_send", True):
                 self.notify("skipped", "Clip not sent",
                             "Too long to fit the upload limit")
         except Exception as e:
             fatal = self._note_failure(e)
-            tries = self.qs.note_attempt(clip_id)
+            tries = self.qs.note_attempt(clip_dir)
             if fatal or tries >= MAX_ATTEMPTS:
-                self.qs.give_up(clip_id)
+                self.qs.give_up(clip_dir)
                 # Far future: only an explicit "Retry now" revives it.
                 self.qs.clip_retry_at[clip_id] = time.time() + 10 ** 9
                 self.log("clip: giving up after %d attempts: %s - %s"

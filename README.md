@@ -42,6 +42,7 @@
 | 🪶 **Light on your game** | Video is compressed on the Deck's hardware H.265 encoder (~7 % CPU). Temp files stay off the RAM-backed `/tmp`. |
 | 🔒 **No cloud, no account** | Media goes straight from your Deck to **your own** Telegram bot. Nothing in between. |
 | 💬 **Discord too** | Prefer sharing in a Discord channel? Pick it in the wizard and paste a webhook URL — no bot to create. |
+| 🖼️ **Pick from the gallery** | A full-screen picker for everything already on the Deck — including anything from before you installed it. Filter by kind or game, select, press X. |
 | 📵 **Offline-safe** | Taken offline? Queued and delivered automatically when you're back online. |
 | 🧹 **Optional cleanup** | Sent media can be deleted from the Deck to free space. |
 
@@ -93,8 +94,11 @@ there.
 3. Paste the URL **on your phone**. That's it — a test message proves it
    works and the Deck is set up.
 
-Only media captured **while sending is ON** is sent. Your existing
-gallery is never touched.
+Only media captured **while sending is ON** is sent automatically. Your
+existing gallery is never touched — but you can reach into it any time
+with **Send from the gallery…**, at the top of the panel: a full-screen
+picker with filters for kind and game. **A** picks, **X** sends, **Y**
+clears, **L1/R1** page. Up to 20 at a time.
 
 <sub>Discord uploads are capped by the server's tier (10 MB on a free
 server, and it follows the **server**, not your Nitro), so clips are
@@ -165,6 +169,7 @@ nowhere near the limit.</sub>
 | 🪶 **게임에 부담 없음** | 영상은 덱의 하드웨어 H.265 인코더로 압축(CPU 약 7%). 임시 파일도 램(/tmp)이 아닌 디스크에. |
 | 🔒 **클라우드·계정 없음** | 미디어는 덱에서 **내 소유의** 텔레그램 봇으로 직행합니다. 중간에 아무것도 없습니다. |
 | 💬 **디스코드도 지원** | 디스코드 채널에서 공유하시나요? 마법사에서 고르고 웹훅 URL만 붙여넣으면 됩니다 — 봇 만들 필요 없습니다. |
+| 🖼️ **갤러리에서 골라 보내기** | 기기에 있는 모든 미디어를 전체 화면으로 — 설치 전에 찍은 것도 포함. 종류·게임으로 걸러 고르고 X 버튼으로 전송. |
 | 📵 **오프라인 안전** | 오프라인일 때 찍은 건 대기해 두었다가 온라인 복귀 시 자동 전송됩니다. |
 | 🧹 **선택적 정리** | 보낸 미디어를 덱에서 자동 삭제해 공간을 확보할 수 있습니다. |
 
@@ -217,8 +222,11 @@ https://github.com/novasound6945/deckygram/releases/latest/download/Deckygram.zi
 3. URL을 **폰에서** 붙여넣으면 끝입니다 — 테스트 메시지로 확인까지
    하고 덱 설정이 마무리됩니다.
 
-**전송이 켜져 있는 동안** 찍은 것만 보냅니다. 기존 갤러리는 절대
-건드리지 않습니다.
+**전송이 켜져 있는 동안** 찍은 것만 자동으로 보냅니다. 기존 갤러리는
+건드리지 않지만, 패널 맨 위의 **갤러리에서 보내기…** 로 언제든 꺼내
+보낼 수 있습니다 — 종류·게임 필터가 있는 전체 화면 목록입니다.
+**A** 선택, **X** 전송, **Y** 전체해제, **L1/R1** 페이지 이동.
+한 번에 최대 20개.
 
 <sub>디스코드 업로드 용량은 서버 등급을 따릅니다(무료 서버 10MB, 내
 Nitro가 아니라 **서버** 기준). 그래서 클립을 더 세게 압축하고 약 3분이
@@ -290,6 +298,7 @@ Backend is dependency-free Python (stdlib only) in `py_modules/deckygram/`:
 | `sender.py` | the send pipeline: albums, clip remux, retry budget, failure classification, delete-after-send |
 | `qstate.py` | what was sent, what stalled, the pending queue and its burst/settle rules — persisted |
 | `captions.py` | caption strings and DASH manifest parsing (pure functions) |
+| `gallery.py` | the picker: index, per-page listing, thumbnails and cached clip posters |
 | `destinations.py` | picks Telegram or Discord; nothing above this layer names a service |
 | `tg.py` / `discord.py` | the two backends — Bot API, and webhook uploads |
 | `media.py` | ffprobe + the HEVC→H.264→x264 encode ladder, to a size budget the caller passes in |

@@ -2,6 +2,45 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.3.0
+
+### Added / 추가
+- **Send from the gallery.** A full-screen picker for everything already
+  on the Deck — including media from before Deckygram was installed,
+  which the watcher can never reach on its own. Thumbnail grid, filters
+  for kind and game, paging, multi-select, and X to send.
+  **갤러리에서 보내기.** 기기에 있는 모든 미디어를 전체 화면에서 골라
+  보냅니다 — 설치 전에 찍은 것까지. 감시 기능만으로는 닿을 수 없던
+  것들입니다. 썸네일 그리드, 종류·게임 필터, 페이징, 다중 선택,
+  X 버튼으로 전송.
+- **Switch destinations without pairing again.** Both credentials are
+  kept side by side, so moving between Telegram and Discord is one press.
+  A setup can also be erased, which was not possible before.
+  **재설정 없이 목적지 전환.** 양쪽 자격증명을 함께 보관하므로 텔레그램과
+  디스코드를 버튼 한 번으로 오갑니다. 설정 삭제도 가능해졌습니다.
+
+### Fixed / 수정
+- A clip picked in the gallery was re-sent on every ten-second scan, each
+  time re-encoding and re-uploading it. The flag that lets a pick bypass
+  the already-sent guard is keyed by path while clips are recorded by
+  folder name, so settling one never cleared it.
+  갤러리에서 고른 클립이 10초마다 재전송되며 매번 재인코딩·재업로드되던
+  문제. 강제 플래그는 경로로, 완료 기록은 폴더 이름으로 관리되어 플래그가
+  풀리지 않았습니다.
+- Clip thumbnails fall back to the opening frame when a DASH manifest
+  refuses to seek, and one that cannot be made at all shows a placeholder
+  instead of spinning forever.
+  DASH 매니페스트 탐색이 실패하는 클립의 썸네일 폴백, 생성 불가 시
+  무한 스피너 대신 대체 아이콘 표시.
+- The version line at the bottom of the panel was clipped: SteamOS
+  scrolls only as far as the focused element, and a plain text row cannot
+  take focus.
+  패널 하단 버전 표시가 잘리던 문제. 스팀은 포커스 가능한 요소까지만
+  스크롤합니다.
+- The gallery lays itself out for the current UI scale rather than
+  assuming 1280 px wide, so the tile grid reflows instead of overflowing.
+  갤러리가 UI 배율에 맞춰 타일 열 수를 조정합니다.
+
 ## v0.2.1
 
 ### Added / 추가
