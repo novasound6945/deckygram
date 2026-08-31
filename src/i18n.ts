@@ -44,6 +44,9 @@ const en: Dict = {
   screenshots: "Screenshots",
   recorded_clips: "Recorded clips",
   notify_toggle: "Show a toast for each send",
+  original_quality: "Screenshots in original quality",
+  original_quality_desc:
+    "Sends screenshots as files, so Telegram cannot re-compress them - they arrive byte-for-byte as saved on the Deck. The visible gain is small (Telegram keeps full resolution and only shaves ~15% off the file), and they show up as attachments instead of a photo grid.",
   only_new_note:
     "Only media captured while sending is ON gets sent - anything taken while paused stays on the Deck. If you're offline, sends are retried automatically once you're back online. Clips too long to fit under Telegram's 50 MB bot limit are skipped (you'll get a toast).",
   delete_after: "Delete from Deck after sending",
@@ -107,6 +110,9 @@ const ko: Dict = {
   screenshots: "스크린샷",
   recorded_clips: "녹화 클립",
   notify_toggle: "전송 결과 알림 표시",
+  original_quality: "스크린샷 원본 화질",
+  original_quality_desc:
+    "스크린샷을 파일로 보내 텔레그램이 재압축하지 못하게 합니다. 덱에 저장된 것과 완전히 동일한 파일이 도착하지만, 체감 화질 차이는 크지 않습니다(해상도는 그대로 유지되고 용량만 약 15% 줄어듦). 사진 그리드가 아니라 첨부 파일로 표시됩니다.",
   only_new_note:
     "전송이 켜져 있는 동안 찍은 것만 보냅니다 - 꺼져 있는 동안 찍은 미디어는 기기에만 남습니다. 오프라인이면 온라인 복귀 후 자동으로 재시도해 보냅니다. 텔레그램 봇 한도(50MB)에 맞출 수 없는 긴 클립은 건너뛰며, 토스트로 알려드립니다.",
   delete_after: "보낸 뒤 기기에서 삭제",

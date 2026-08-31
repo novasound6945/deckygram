@@ -68,6 +68,7 @@ type Settings = {
   enabled: boolean;
   send_screenshots: boolean;
   send_clips: boolean;
+  original_quality: boolean;
   notify_on_send: boolean;
   delete_after_send: boolean;
 };
@@ -360,6 +361,16 @@ function Content() {
           <ToggleField label={t("screenshots")} checked={settings.send_screenshots}
             onChange={(v) => patch({ send_screenshots: v })} />
         </PanelSectionRow>
+        {settings.send_screenshots ? (
+          <PanelSectionRow>
+            <ToggleField
+              label={t("original_quality")}
+              description={t("original_quality_desc")}
+              checked={settings.original_quality}
+              onChange={(v) => patch({ original_quality: v })}
+            />
+          </PanelSectionRow>
+        ) : null}
         <PanelSectionRow>
           <ToggleField label={t("recorded_clips")} checked={settings.send_clips}
             onChange={(v) => patch({ send_clips: v })} />

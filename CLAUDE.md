@@ -16,6 +16,14 @@ reaches the public repo:
    ```bash
    git grep -I "<pattern>" $(git rev-list --all)
    ```
+1-1. **Screenshots and images are data too.** A QR code in a screenshot
+   is scannable; the wizard shots leaked the pairing URL (LAN IP + nonce)
+   both as a QR and as plain text (caught 2026-08-31). Before publishing
+   any screenshot, check it for QR codes, tokens, addresses, and account
+   details — sanitize with a decoy QR / example address, and if an
+   original already reached history, replace the blob everywhere
+   (filter-branch --tree-filter, drop refs/original, reflog expire,
+   gc --prune=now, force-push).
 2. **Check commit authors** (`git log --format='%an <%ae>' | sort -u`) —
    no private email addresses beyond the intended public one.
 3. Secrets live only in Decky's settings dir on the device (mode 600),
@@ -45,16 +53,19 @@ reaches the public repo:
 - Attribution: this project is built with **Claude (Fable 5)** — keep the
   credit line at the bottom of README.md.
 
-## Tech debt — pay BEFORE adding features
+## Backend layout & tests
 
-- `watcher.py` has grown past 550 lines and mixes four concerns.
-  **Before the next feature lands**, split it: watch loop / inotify,
-  sender (file+clip processing), queue/stats, captions.  Do not split
-  "for cleanliness" while the code is freshly field-tested — split when
-  you're about to touch it anyway.
-- Pure logic has no unit tests yet (`appname` id-form conversions,
-  `tg` bitrate/size math are ideal candidates).  Add them together with
-  the split, and wire into CI.
+- Backend modules (split 2026-08-31, keep the boundaries):
+  `watcher.py` orchestration/discovery/loop · `sender.py` send pipeline ·
+  `qstate.py` queue+stats state · `captions.py` caption/manifest parsing
+  (pure) · `inotify.py` ctypes wrapper · `tg.py` Bot API+encoding ·
+  `appname.py` appid→name · `pairing.py` · `updates.py`.
+- Unit tests live in `tests/` (stdlib `unittest`, no fs/network beyond
+  tempdirs) and run in CI. When adding logic, put the pure part in a
+  testable function and cover it — the batching rules, size math and
+  vdf id-matching are the model to follow.
+- Run locally (this PC has no Python):
+  `docker run --rm -v C:\deckygram:/w -w /w python:3.12-alpine python -m unittest discover -s tests -t .`
 
 ## Update-checker lifecycle
 

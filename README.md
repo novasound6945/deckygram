@@ -12,14 +12,16 @@
 [![License](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
 [![Decky](https://img.shields.io/badge/Decky-plugin-6f42c1)](https://decky.xyz)
 
-[English](#english) · [한국어](#한국어)
+🇺🇸 [English](#english) · 🇰🇷 [한국어](#한국어)
 
 <table><tr>
-<td><img src="docs/panel-main-en.jpg" alt="Deckygram panel in Game Mode" width="420"/></td>
-<td><img src="docs/panel-wizard-qr.jpg" alt="QR pairing wizard" width="420"/></td>
+<td><img src="docs/panel-main-en.jpg" alt="Deckygram panel in Game Mode" width="360"/></td>
+<td><img src="docs/panel-wizard-qr.jpg" alt="QR pairing wizard" width="360"/></td>
+<td><img src="docs/telegram-arrival.jpg" alt="Screenshots arriving in Telegram as an album" width="250"/></td>
 </tr><tr>
 <td align="center"><sub>Quick Access panel / 퀵 액세스 패널</sub></td>
 <td align="center"><sub>QR pairing — scan with your phone / 폰으로 찍는 QR 페어링</sub></td>
+<td align="center"><sub>…and they arrive as an album / 앨범으로 도착!</sub></td>
 </tr></table>
 
 <sub>UI follows your Steam language — shown here in English and 한국어.</sub>
@@ -76,11 +78,18 @@ gallery is never touched.
 ### ⚙️ Good to know
 
 - **Requirements**: a Steam Deck on stock SteamOS — nothing to install
-  separately. Clips additionally need Steam's **Game Recording** feature
-  turned on (Settings → Game Recording). `ffmpeg` ships with SteamOS; if
-  it's ever missing, the plugin says so and screenshots keep working.
+  separately. Clips are picked up whenever Steam saves one — **background
+  recording and manual (on-demand) recording both work**; just don't leave
+  Settings → Game Recording on *Never record*. `ffmpeg` ships with
+  SteamOS; if it's ever missing, the plugin says so and screenshots keep
+  working.
 - Screenshot bursts arrive as **one album** (one notification), not a
   ping per shot.
+- Telegram re-compresses every photo it receives. Turn on **Screenshots
+  in original quality** to send them as files instead — identical to what
+  is on the Deck, at the cost of appearing as attachments rather than a
+  photo grid. Expect a modest gain: resolution is untouched either way,
+  and the re-compression only costs about 15 % of the file size.
 - Clips too long to fit Telegram's 50 MB bot limit (~30 min+) are
   skipped up front — you'll get a toast.
 - Failed sends retry automatically (30 s backoff); the panel also has
@@ -96,7 +105,7 @@ gallery is never touched.
 | Pairing page won't open on the phone | Phone and Deck must be on the **same Wi-Fi**; router "AP/client isolation" blocks it. Use *Type the token manually* as fallback. |
 | "Invalid token" | Copy the whole token from BotFather (`123456:ABC...`), no spaces. |
 | "no message yet" | Open your bot in Telegram and press **START**, then tap detect again. |
-| Clips never send | Steam **Game Recording** must be enabled; clips over ~30 min can't fit 50 MB and are skipped (toast shown). |
+| Clips never send | Settings → **Game Recording** must not be on *Never record* (background or manual recording both work) — and a clip only exists once you **save/stop** it. Clips over ~30 min can't fit 50 MB and are skipped (toast shown). |
 | Anything else | Logs live in `~/homebrew/logs/Deckygram/` — attach the newest file to a GitHub issue along with the version shown in the panel. |
 
 ---
@@ -149,11 +158,16 @@ https://github.com/novasound6945/deckygram/releases/latest/download/Deckygram.zi
 ### ⚙️ 알아두면 좋은 것
 
 - **요구사항**: 순정 SteamOS 스팀덱이면 끝 — 따로 설치할 게 없습니다.
-  클립 전송은 스팀의 **게임 녹화** 기능이 켜져 있어야 합니다
-  (설정 → 게임 녹화). `ffmpeg`는 SteamOS에 기본 포함이며, 혹시 없으면
+  클립은 스팀이 저장하는 순간 감지합니다 — **백그라운드 녹화, 수동
+  녹화 모두 지원**하며, 설정 → 게임 녹화가 *녹화 안 함*으로만 되어
+  있지 않으면 됩니다. `ffmpeg`는 SteamOS에 기본 포함이며, 혹시 없으면
   플러그인이 알려주고 스크린샷 전송은 계속 동작합니다.
 - 연속 스크린샷은 **앨범 하나**(알림 1번)로 도착합니다 — 장마다
   울리지 않습니다.
+- 텔레그램은 받은 사진을 항상 재압축합니다. **스크린샷 원본 화질**을
+  켜면 파일로 보내 덱에 있는 그대로 도착합니다 — 대신 사진 그리드가
+  아니라 첨부 파일 형태로 표시됩니다. 다만 기대치는 낮게: 어느 쪽이든
+  해상도는 그대로이고 재압축으로 줄어드는 용량은 약 15% 정도입니다.
 - 텔레그램 봇 한도(50MB)에 맞출 수 없는 긴 클립(약 30분+)은 처음부터
   건너뛰고 토스트로 알려줍니다.
 - 전송 실패는 30초 간격으로 자동 재시도되고, 패널에
@@ -169,7 +183,7 @@ https://github.com/novasound6945/deckygram/releases/latest/download/Deckygram.zi
 | 폰에서 페어링 페이지가 안 열림 | 폰과 덱이 **같은 와이파이**여야 합니다. 공유기의 "AP 격리/기기 간 통신 차단"이 막을 수 있어요. 안 되면 *토큰 직접 입력*으로. |
 | "잘못된 토큰" | BotFather가 준 토큰 전체(`123456:ABC...`)를 공백 없이 복사했는지 확인. |
 | "아직 메시지가 없습니다" | 텔레그램에서 내 봇을 열어 **시작**을 누른 뒤 다시 감지. |
-| 클립이 전혀 안 옴 | 스팀 **게임 녹화** 기능이 켜져 있어야 합니다. 30분 넘는 클립은 50MB에 못 맞춰 건너뜁니다(토스트 표시). |
+| 클립이 전혀 안 옴 | 설정 → **게임 녹화**가 *녹화 안 함*이면 안 됩니다(백그라운드·수동 녹화 모두 지원). 클립은 **저장/녹화 종료**해야 생깁니다. 30분 넘는 클립은 50MB에 못 맞춰 건너뜁니다(토스트 표시). |
 | 그 외 | 로그는 `~/homebrew/logs/Deckygram/` 에 있습니다 — 최신 파일과 패널의 버전을 GitHub 이슈에 첨부해 주세요. |
 
 ---

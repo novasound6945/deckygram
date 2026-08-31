@@ -32,6 +32,7 @@ DEFAULTS = {
     "enabled": False,
     "send_screenshots": True,
     "send_clips": True,
+    "original_quality": False,
     "notify_on_send": True,
     "video_bitrate": 2_000_000,
     "video_fps": 30,

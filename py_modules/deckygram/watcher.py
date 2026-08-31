@@ -1,7 +1,13 @@
 """Watch Steam screenshot and recording folders, send new media to Telegram.
 
-Runs as a daemon thread. inotify is used directly through ctypes because
-SteamOS ships no inotify-tools and the plugin must stay dependency-free.
+Runs as a daemon thread.  This module is the orchestrator: folder
+discovery, the inotify/poll loop and the public control surface
+(start/stop, queue_info, retry, skip).  The pieces live next door:
+
+  inotify.py   raw inotify wrapper (ctypes; polling fallback)
+  qstate.py    sent/clip bookkeeping, counters, the pending queue
+  sender.py    actual sending: albums, clip remux+encode, retries
+  captions.py  caption strings and clip-manifest parsing
 
 What is watched
   - per-game screenshot dirs   userdata/*/760/remote/<appid>/screenshots
@@ -18,34 +24,19 @@ with ffmpeg -c copy (no re-encode) before sending, exactly like pressing
 "export" in the Steam UI - but automatic.
 """
 
-import ctypes
-import ctypes.util
 import glob
 import os
-import re
-import select
-import shutil
-import struct
-import subprocess
-import tempfile
 import threading
 import time
 
 from . import tg
-
-IN_CLOSE_WRITE = 0x00000008
-IN_MOVED_TO = 0x00000080
-IN_CREATE = 0x00000100
-IN_IGNORED = 0x00008000
-EVENT_FMT = "iIII"
-EVENT_SIZE = struct.calcsize(EVENT_FMT)
+from .inotify import Inotify
+from .qstate import QueueState
+from .sender import Sender, SETTLE_SEC
 
 MEDIA_EXT = tg.IMAGE_EXT | tg.VIDEO_EXT
-SETTLE_SEC = 3          # wait after last write before sending
-CLIP_SETTLE_SEC = 30    # clips: recording may still be in progress
 FULL_SCAN_SEC = 600     # safety net for missed events
 CLIP_SCAN_SEC = 10      # clips are dirs, not files - poll instead of inotify
-RETRY_SEC = 30          # backoff before retrying a failed send
 
 
 class Watcher:
@@ -54,137 +45,21 @@ class Watcher:
         notify(kind, title, body) is called after each successful send.
         """
         self.home = home
-        self.state_dir = state_dir
         self.get_settings = settings_getter
-        self.resolver = resolver
-        self.notify = notify or (lambda *a: None)
         self.log = log or (lambda *a: None)
 
-        self.sent_path = os.path.join(state_dir, "sent.list")
-        self.clips_path = os.path.join(state_dir, "clips_done.list")
-        self.stats_path = os.path.join(state_dir, "stats.txt")
-        self._sent = self._load(self.sent_path)
-        self._clips_done = self._load(self.clips_path)
-
-        # SteamOS ships ffmpeg, but never assume: if it is missing, clips
-        # would otherwise fail-and-retry forever.  Screenshots do not need
-        # it, so we just disable the clip pipeline and say why.
-        self.ffmpeg_ok = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
-
-        self._pending = {}          # path -> last event time
-        self._clip_retry_at = {}    # clip_id -> not-before timestamp
-        self._no_album = set()      # paths that failed as an album once
-        self._wd_to_dir = {}
-        self._thread = None
-        self._stop = threading.Event()
-        self._lock = threading.Lock()
-        self._qcache = (0.0, None)   # (timestamp, last queue_info result)
+        self.qs = QueueState(state_dir)
         self.status = {"running": False, "watching": 0,
-                       "ffmpeg_ok": self.ffmpeg_ok,
-                       "sent": self._load_sent_count(),
+                       "sent": self.qs.sent_count,
                        "failed": 0, "last_sent": "", "last_error": "",
                        "current": "", "progress": -1}
+        self.sender = Sender(self.qs, state_dir, settings_getter, resolver,
+                             notify=notify, log=self.log, status=self.status)
+        self.status["ffmpeg_ok"] = self.sender.ffmpeg_ok
 
-    def _load_sent_count(self):
-        try:
-            with open(self.stats_path, encoding="utf-8") as f:
-                return int(f.read().strip() or 0)
-        except (OSError, ValueError):
-            return 0
-
-    def _bump_sent(self):
-        self.status["sent"] += 1
-        try:
-            with self._lock:
-                with open(self.stats_path, "w", encoding="utf-8") as f:
-                    f.write(str(self.status["sent"]))
-        except OSError:
-            pass
-
-    def _clip_duration(self, clip_dir):
-        """Seconds, read from the DASH manifest's mediaPresentationDuration.
-
-        The manifest is a small XML file; a regex read is far cheaper than
-        spawning ffprobe and this runs on every status poll.
-        """
-        mpds = glob.glob(os.path.join(clip_dir, "**", "session.mpd"),
-                         recursive=True)
-        if not mpds:
-            return 0
-        try:
-            text = open(mpds[0], encoding="utf-8", errors="replace").read(4096)
-        except OSError:
-            return 0
-        m = re.search(
-            r'mediaPresentationDuration="PT(?:(\d+)H)?(?:(\d+)M)?(?:([\d.]+)S)?"',
-            text)
-        if not m:
-            return 0
-        h, mi, s = (float(x) if x else 0 for x in m.groups())
-        return int(h * 3600 + mi * 60 + s)
-
-    def queue_info(self):
-        """What is waiting to go out, split by kind, with sizes.
-
-        Cached for a few seconds: the UI polls every 2 s and this walks
-        every screenshot dir - on a Deck with years of screenshots that
-        is real work we should not repeat per poll.
-
-        Image sizes are exact.  Clip sizes are an ESTIMATE of what will
-        actually be uploaded (duration x configured bitrate + audio),
-        because the raw DASH recording on disk is far larger than the
-        compressed file we send.
-        """
-        now = time.time()
-        ts, cached = self._qcache
-        if cached is not None and now - ts < 4:
-            return dict(cached)
-
-        img_n = img_b = 0
-        for f in self._collect_media():
-            if f in self._sent:
-                continue
-            img_n += 1
-            try:
-                img_b += os.path.getsize(f)
-            except OSError:
-                pass
-
-        s = self.get_settings()
-        vbr = int(s.get("video_bitrate", 2_000_000))
-        clip_n = clip_b = 0
-        for d in self._all_clip_dirs():
-            if os.path.basename(d) in self._clips_done:
-                continue
-            clip_n += 1
-            dur = self._clip_duration(d)
-            if dur > 0:
-                est = dur * (vbr + 96_000) // 8
-                clip_b += min(est, tg.SIZE_TARGET)
-
-        result = {
-            "queued": img_n + clip_n,
-            "queued_images": img_n,
-            "queued_images_bytes": img_b,
-            "queued_clips": clip_n,
-            "queued_clips_bytes": clip_b,
-        }
-        self._qcache = (now, result)
-        return dict(result)
-
-    # ------------------------------------------------------------ state files
-
-    def _load(self, path):
-        try:
-            with open(path, encoding="utf-8") as f:
-                return set(line.strip() for line in f if line.strip())
-        except OSError:
-            return set()
-
-    def _record(self, path, item):
-        with self._lock:
-            with open(path, "a", encoding="utf-8") as f:
-                f.write(item + "\n")
+        self._thread = None
+        self._stop = threading.Event()
+        self._qcache = (0.0, None)   # (timestamp, last queue_info result)
 
     # -------------------------------------------------------------- discovery
 
@@ -212,348 +87,105 @@ class Watcher:
                     out.append(f)
         return out
 
-    def seed_existing(self):
-        """Mark everything currently on disk as already sent (first run)."""
-        n = 0
-        for f in self._collect_media():
-            if f not in self._sent:
-                self._sent.add(f)
-                self._record(self.sent_path, f)
-                n += 1
-        for d in self._all_clip_dirs():
-            cid = os.path.basename(d)
-            if cid not in self._clips_done:
-                self._clips_done.add(cid)
-                self._record(self.clips_path, cid)
-                n += 1
-        return n
-
     def _all_clip_dirs(self):
         out = []
         for root in self._clip_roots():
             out.extend(d for d in glob.glob(os.path.join(root, "*")) if os.path.isdir(d))
         return out
 
-    @staticmethod
-    def _friendly(e):
-        """Turn raw exception text into something a user can act on."""
-        msg = str(e)
-        low = msg.lower()
-        if "urlopen" in low or "timed out" in low or "getaddrinfo" in low \
-                or "connection" in low or "unreachable" in low:
-            return "Network error - will retry automatically"
-        return msg[:200]
+    def seed_existing(self):
+        """Mark everything currently on disk as already sent (first run)."""
+        n = 0
+        for f in self._collect_media():
+            if f not in self.qs.sent:
+                self.qs.mark_sent(f)
+                n += 1
+        for d in self._all_clip_dirs():
+            cid = os.path.basename(d)
+            if cid not in self.qs.clips_done:
+                self.qs.mark_clip_done(cid)
+                n += 1
+        return n
 
-    # ---------------------------------------------------------------- captions
+    # ------------------------------------------------------------- UI surface
 
-    def _caption_for(self, path):
-        m = re.search(r"/760/remote/(\d+)/screenshots/", path)
-        appid = m.group(1) if m else ""
-        name = self.resolver.resolve(appid) if appid else os.path.splitext(
-            os.path.basename(path))[0]
-        try:
-            when = time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(path)))
-        except OSError:
-            when = time.strftime("%Y-%m-%d %H:%M")
-        return "%s · %s" % (name, when)
+    def queue_info(self):
+        """What is waiting to go out, split by kind, with sizes.
 
-    def _clip_caption(self, clip_id):
-        m = re.match(r"clip_(\d+)_(\d{8})_(\d{6})", clip_id)
-        if not m:
-            return "Steam Deck clip"
-        name = self.resolver.resolve(m.group(1))
-        d, t = m.group(2), m.group(3)
-        return "%s · %s-%s-%s %s:%s" % (name, d[:4], d[4:6], d[6:8], t[:2], t[2:4])
+        Cached for a few seconds: the UI polls every 2 s and this walks
+        every screenshot dir - on a Deck with years of screenshots that
+        is real work we should not repeat per poll.
 
-    # ---------------------------------------------------------------- deleting
-
-    def _delete_media(self, path):
-        """Remove a sent screenshot/video from the Deck to free space.
-
-        Screenshots keep a thumbnail next to them
-        (.../screenshots/thumbnails/<same name>) - remove that too so the
-        Steam media gallery does not show a broken entry.
+        Image sizes are exact.  Clip sizes are an ESTIMATE of what will
+        actually be uploaded (duration x configured bitrate + audio),
+        because the raw DASH recording on disk is far larger than the
+        compressed file we send.
         """
-        try:
-            os.unlink(path)
-            thumb = os.path.join(os.path.dirname(path), "thumbnails",
-                                 os.path.basename(path))
-            if os.path.isfile(thumb):
-                os.unlink(thumb)
-            self.log("deleted after send: %s" % os.path.basename(path))
-        except OSError as e:
-            self.log("delete failed: %s - %s" % (os.path.basename(path), e))
+        now = time.time()
+        ts, cached = self._qcache
+        if cached is not None and now - ts < 4:
+            return dict(cached)
 
-    def _delete_clip(self, clip_dir):
-        try:
-            shutil.rmtree(clip_dir)
-            self.log("clip deleted after send: %s" % os.path.basename(clip_dir))
-        except OSError as e:
-            self.log("clip delete failed: %s - %s" % (os.path.basename(clip_dir), e))
-
-    # ----------------------------------------------------------------- sending
-
-    def _send_file(self, path, caption):
-        s = self.get_settings()
-
-        def prog(pct):
-            self.status["progress"] = pct
-
-        def phase(name):
-            label = "Encoding" if name == "encoding" else "Sending"
-            self.status["current"] = "%s: %s" % (label, caption)
-
-        tg.send_media(s["token"], s["chat_id"], path, caption,
-                      bitrate=int(s.get("video_bitrate", 2_000_000)),
-                      fps=int(s.get("video_fps", 30)),
-                      maxh=int(s.get("video_maxh", 600)),
-                      progress=prog, phase=phase)
-
-    def _process_file(self, path):
-        if path in self._sent or not os.path.isfile(path):
-            return
-        s = self.get_settings()
-        ext = os.path.splitext(path)[1].lower()
-        if ext in tg.IMAGE_EXT and not s.get("send_screenshots", True):
-            return
-        # Still being written (full scan can discover a file mid-write,
-        # unlike the IN_CLOSE_WRITE inotify path): come back later.
-        try:
-            if time.time() - os.path.getmtime(path) < SETTLE_SEC:
-                with self._lock:
-                    self._pending[path] = time.time()
-                return
-        except OSError:
-            return
-        caption = self._caption_for(path)
-        self.status["current"] = "Sending: %s" % caption
-        try:
-            self._send_file(path, caption)
-            self._sent.add(path)
-            self._record(self.sent_path, path)
-            self._bump_sent()
-            self.status["last_sent"] = caption
-            self.log("sent: %s" % os.path.basename(path))
-            if s.get("notify_on_send", True):
-                self.notify("sent", "Sent to Telegram", caption)
-            if s.get("delete_after_send"):
-                self._delete_media(path)
-        except tg.Unsendable as e:
-            self._sent.add(path)
-            self._record(self.sent_path, path)
-            self.log("skipped (%s): %s" % (e, os.path.basename(path)))
-        except Exception as e:
-            self.status["failed"] += 1
-            self.status["last_error"] = self._friendly(e)
-            # Re-queue with a short backoff so a Wi-Fi hiccup recovers in
-            # ~30 s instead of waiting for the 10-minute full scan.
-            with self._lock:
-                self._pending[path] = time.time() + RETRY_SEC
-            self.log("failed (retry in %ds): %s - %s"
-                     % (RETRY_SEC, os.path.basename(path), e))
-        finally:
-            self.status["current"] = ""
-            self.status["progress"] = -1
-
-    def _process_batch(self, paths):
-        """Send a tick's worth of ready files.
-
-        Screenshots from the SAME game are grouped into Telegram albums
-        (up to 10) so a burst produces one notification instead of ten.
-        Anything that is not a groupable screenshot goes through the
-        normal one-by-one path.
-        """
-        if not paths:
-            return
-        s = self.get_settings()
-        groups = {}     # appid -> [paths]
-        singles = []
-        for p in paths:
-            if not os.path.isfile(p):
+        img_n = img_b = 0
+        for f in self._collect_media():
+            if f in self.qs.sent:
                 continue
-            m = re.search(r"/760/remote/(\d+)/screenshots/", p)
-            if (m and os.path.splitext(p)[1].lower() in tg.IMAGE_EXT
-                    and s.get("send_screenshots", True)
-                    and p not in self._sent
-                    and p not in self._no_album):
-                groups.setdefault(m.group(1), []).append(p)
-            else:
-                singles.append(p)
+            img_n += 1
+            try:
+                img_b += os.path.getsize(f)
+            except OSError:
+                pass
 
-        for appid, files in groups.items():
-            files.sort()
-            if len(files) < 2:
-                singles.extend(files)
+        s = self.get_settings()
+        vbr = int(s.get("video_bitrate", 2_000_000))
+        clip_n = clip_b = 0
+        for d in self._all_clip_dirs():
+            if os.path.basename(d) in self.qs.clips_done:
                 continue
-            for i in range(0, len(files), 10):
-                self._send_album(appid, files[i:i + 10], s)
+            clip_n += 1
+            dur = self.sender.clip_duration(d)
+            if dur > 0:
+                est = dur * (vbr + 96_000) // 8
+                clip_b += min(est, tg.SIZE_TARGET)
 
-        for p in singles:
-            self._process_file(p)
-
-    def _send_album(self, appid, files, s):
-        name = self.resolver.resolve(appid)
-        when = time.strftime("%Y-%m-%d %H:%M")
-        caption = "%s · %s (%d)" % (name, when, len(files))
-        self.status["current"] = "Sending album: %s" % caption
-        try:
-            tg.send_photo_album(s["token"], s["chat_id"], files, caption)
-            for p in files:
-                self._sent.add(p)
-                self._record(self.sent_path, p)
-                self._bump_sent()
-                if s.get("delete_after_send"):
-                    self._delete_media(p)
-            self.status["last_sent"] = caption
-            self.log("album sent: %s" % caption)
-            if s.get("notify_on_send", True):
-                self.notify("sent", "Sent to Telegram", caption)
-        except Exception as e:
-            # Fall back to per-file sends (with their own retry) next tick.
-            self.status["failed"] += 1
-            self.status["last_error"] = self._friendly(e)
-            with self._lock:
-                for p in files:
-                    self._no_album.add(p)
-                    self._pending[p] = time.time() + RETRY_SEC
-            self.log("album failed (%s) - will retry individually" % e)
-        finally:
-            self.status["current"] = ""
+        result = {
+            "queued": img_n + clip_n,
+            "queued_images": img_n,
+            "queued_images_bytes": img_b,
+            "queued_clips": clip_n,
+            "queued_clips_bytes": clip_b,
+        }
+        self._qcache = (now, result)
+        return dict(result)
 
     def retry_now(self):
         """Manual retry: make every unsent item eligible immediately."""
         now = time.time() - SETTLE_SEC
         n = 0
-        with self._lock:
+        with self.qs.lock:
             for f in self._collect_media():
-                if f not in self._sent:
-                    self._pending[f] = now
+                if f not in self.qs.sent:
+                    self.qs.pending[f] = now
                     n += 1
-        self._clip_retry_at = {}
+        self.qs.clip_retry_at = {}
         self.status["last_error"] = ""
         return n
 
     def skip_queued(self):
         """Manual pass: mark everything currently waiting as handled."""
         n = 0
-        with self._lock:
-            self._pending.clear()
+        self.qs.clear_pending()
         for f in self._collect_media():
-            if f not in self._sent:
-                self._sent.add(f)
-                self._record(self.sent_path, f)
+            if f not in self.qs.sent:
+                self.qs.mark_sent(f)
                 n += 1
         for d in self._all_clip_dirs():
             cid = os.path.basename(d)
-            if cid not in self._clips_done:
-                self._clips_done.add(cid)
-                self._record(self.clips_path, cid)
+            if cid not in self.qs.clips_done:
+                self.qs.mark_clip_done(cid)
                 n += 1
         self.status["last_error"] = ""
         return n
-
-    def _process_clip(self, clip_dir):
-        if not self.ffmpeg_ok:
-            return
-        clip_id = os.path.basename(clip_dir)
-        if clip_id in self._clips_done:
-            return
-        if time.time() < self._clip_retry_at.get(clip_id, 0):
-            return   # backing off after a failure
-        s = self.get_settings()
-        if not s.get("send_clips", True):
-            return
-        # Steam writes fragments into SUBdirectories, which does not bump
-        # the top dir's mtime - judge "still being written" by the newest
-        # file anywhere inside the clip.
-        newest = 0
-        try:
-            for root, _, files in os.walk(clip_dir):
-                for f in files:
-                    try:
-                        m = os.path.getmtime(os.path.join(root, f))
-                        if m > newest:
-                            newest = m
-                    except OSError:
-                        pass
-        except OSError:
-            return
-        if newest == 0 or time.time() - newest < CLIP_SETTLE_SEC:
-            return  # still being written; next scan will retry
-        mpds = glob.glob(os.path.join(clip_dir, "**", "session.mpd"), recursive=True)
-        if not mpds:
-            self._clips_done.add(clip_id)
-            self._record(self.clips_path, clip_id)
-            return
-
-        # Hopeless clips (too long to ever fit under the 50 MB bot limit,
-        # ~30+ minutes) are rejected up front, before spending a GB-scale
-        # remux on them.
-        dur = self._clip_duration(clip_dir)
-        if dur > 0 and tg.SIZE_TARGET * 8 // dur - 128_000 < 400_000:
-            self._clips_done.add(clip_id)
-            self._record(self.clips_path, clip_id)
-            self.log("clip skipped up front (too long: %ds): %s" % (dur, clip_id))
-            if s.get("notify_on_send", True):
-                self.notify("skipped", "Clip not sent",
-                            "Too long to fit under Telegram's 50 MB bot limit")
-            return
-
-        # Remux target lives on disk (state dir), NOT /tmp: SteamOS /tmp is
-        # tmpfs, and a long recording remuxed into RAM would fight the
-        # running game for memory.
-        tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False,
-                                          dir=self.state_dir)
-        tmp.close()
-        caption = self._clip_caption(clip_id)
-        try:
-            self.status["current"] = "Exporting clip: %s" % caption
-            r = subprocess.run(
-                ["ffmpeg", "-y", "-loglevel", "error", "-i", mpds[0],
-                 "-c", "copy", tmp.name],
-                capture_output=True, timeout=600, cwd=os.path.dirname(mpds[0]))
-            if r.returncode != 0 or os.path.getsize(tmp.name) == 0:
-                self.log("clip remux failed: %s" % clip_id)
-                return
-            self.status["current"] = "Encoding & sending: %s" % caption
-            self._send_file(tmp.name, caption)
-            self._clips_done.add(clip_id)
-            self._record(self.clips_path, clip_id)
-            self._bump_sent()
-            self.status["last_sent"] = caption
-            self.log("clip sent: %s" % clip_id)
-            if s.get("notify_on_send", True):
-                self.notify("sent", "Clip sent to Telegram", caption)
-            if s.get("delete_after_send"):
-                self._delete_clip(clip_dir)
-        except tg.Unsendable as e:
-            self._clips_done.add(clip_id)
-            self._record(self.clips_path, clip_id)
-            self.log("clip skipped (%s): %s" % (e, clip_id))
-            if s.get("notify_on_send", True):
-                self.notify("skipped", "Clip not sent",
-                            "Too long to fit under Telegram's 50 MB bot limit")
-        except Exception as e:
-            self.status["failed"] += 1
-            self.status["last_error"] = self._friendly(e)
-            self._clip_retry_at[clip_id] = time.time() + RETRY_SEC * 2
-            self.log("clip failed (retry in %ds): %s - %s" % (RETRY_SEC * 2, clip_id, e))
-        finally:
-            self.status["current"] = ""
-            self.status["progress"] = -1
-            try:
-                os.unlink(tmp.name)
-            except OSError:
-                pass
-
-    def _full_scan(self):
-        with self._lock:
-            for f in self._collect_media():
-                if f not in self._sent:
-                    self._pending[f] = time.time()
-        for d in self._all_clip_dirs():
-            if os.path.basename(d) not in self._clips_done:
-                self._process_clip(d)
 
     # -------------------------------------------------------------- main loop
 
@@ -566,7 +198,7 @@ class Watcher:
         n = self.seed_existing()
         if n:
             self.log("seeded %d items captured while paused" % n)
-        if not self.ffmpeg_ok:
+        if not self.sender.ffmpeg_ok:
             self.log("ffmpeg/ffprobe not found - clip sending disabled")
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -576,25 +208,22 @@ class Watcher:
         self._stop.set()
         self.status["running"] = False
 
+    def _full_scan(self):
+        with self.qs.lock:
+            for f in self._collect_media():
+                if f not in self.qs.sent:
+                    self.qs.pending[f] = time.time()
+        for d in self._all_clip_dirs():
+            if os.path.basename(d) not in self.qs.clips_done:
+                self.sender.process_clip(d)
+
     def _run(self):
-        libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6",
-                           use_errno=True)
-        fd = libc.inotify_init()
-        if fd < 0:
-            self.log("inotify_init failed; falling back to polling only")
-            fd = None
+        ino = Inotify(log=self.log)
 
         def add_watches():
-            if fd is None:
-                return
-            mask = IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE
             for d in self._watch_roots():
-                if d in self._wd_to_dir.values():
-                    continue
-                wd = libc.inotify_add_watch(fd, d.encode(), mask)
-                if wd >= 0:
-                    self._wd_to_dir[wd] = d
-            self.status["watching"] = len(self._wd_to_dir)
+                ino.watch(d)
+            self.status["watching"] = ino.watched
 
         add_watches()
         self.status["running"] = True
@@ -608,61 +237,26 @@ class Watcher:
           # keep looping.  (The UI would otherwise show "running" forever
           # over a dead thread.)
           try:
-            timeout = 2.0
-            if fd is not None:
-                r, _, _ = select.select([fd], [], [], timeout)
-                if r:
-                    data = os.read(fd, 65536)
-                    off = 0
-                    while off + EVENT_SIZE <= len(data):
-                        wd, mask, cookie, length = struct.unpack_from(EVENT_FMT, data, off)
-                        name = data[off + EVENT_SIZE: off + EVENT_SIZE + length].split(b"\0")[0]
-                        off += EVENT_SIZE + length
-                        if mask & IN_IGNORED:
-                            # Watched dir was deleted; drop the stale entry so
-                            # add_watches() can re-register it when it returns.
-                            self._wd_to_dir.pop(wd, None)
-                            last_rewatch = 0
-                            continue
-                        base = self._wd_to_dir.get(wd)
-                        if not base:
-                            continue
-                        full = os.path.join(base, name.decode("utf-8", "replace"))
-                        if os.path.isdir(full):
-                            last_rewatch = 0  # new folder: re-scan watches soon
-                        elif os.path.splitext(full)[1].lower() in MEDIA_EXT:
-                            with self._lock:
-                                self._pending[full] = time.time()
-            else:
-                time.sleep(timeout)
+            for ev in ino.poll(2.0):
+                if ev.ignored:
+                    last_rewatch = 0
+                    continue
+                full = os.path.join(ev.base, ev.name)
+                if os.path.isdir(full):
+                    last_rewatch = 0  # new folder: re-scan watches soon
+                elif os.path.splitext(full)[1].lower() in MEDIA_EXT:
+                    self.qs.queue(full)
 
             now = time.time()
-
-            with self._lock:
-                # Burst-friendly: while ANY image is still inside its settle
-                # window, hold the ready images too, so a run of screenshots
-                # lands in one batch (-> one Telegram album, one ping).
-                img_settling = any(
-                    now - t < SETTLE_SEC
-                    and os.path.splitext(p)[1].lower() in tg.IMAGE_EXT
-                    for p, t in self._pending.items())
-                ready = []
-                for p, t in list(self._pending.items()):
-                    if now - t < SETTLE_SEC:
-                        continue
-                    if img_settling and \
-                            os.path.splitext(p)[1].lower() in tg.IMAGE_EXT:
-                        continue
-                    ready.append(p)
-                    del self._pending[p]
-            self._process_batch(ready)
+            ready = self.qs.take_ready(now, SETTLE_SEC, tg.IMAGE_EXT)
+            self.sender.process_batch(ready)
 
             # Clips are directories full of DASH fragments, so inotify on the
             # clip root only tells us "a folder appeared" - poll them on a
             # short interval instead of waiting for the big full scan.
             if now - last_clip_scan > CLIP_SCAN_SEC:
                 for d in self._all_clip_dirs():
-                    self._process_clip(d)
+                    self.sender.process_clip(d)
                 last_clip_scan = now
 
             if now - last_rewatch > 60:
@@ -676,8 +270,4 @@ class Watcher:
             time.sleep(2)
 
         self.status["running"] = False
-        if fd is not None:
-            try:
-                os.close(fd)
-            except OSError:
-                pass
+        ino.close()

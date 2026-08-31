@@ -26,6 +26,37 @@ from .tg import _SSL_CTX
 _STORE_API = "https://store.steampowered.com/api/appdetails?appids=%s&filters=basic"
 
 
+def id_matches(raw: int, want: int) -> bool:
+    """Does a shortcuts.vdf appid match a folder id in any of its 3 shapes?
+
+    raw  - the 32-bit value stored in shortcuts.vdf
+    want - the id taken from a media folder name, which is either the
+           same value, its low 24 bits (screenshot folders), or a 64-bit
+           number carrying the appid in the high 32 bits (clip folders).
+    """
+    return (raw == want
+            or (raw & 0xFFFFFF) == want
+            or (want >> 32) == raw)
+
+
+def shortcut_name_from_vdf(data: bytes, want: int):
+    """Scan binary shortcuts.vdf content for the entry matching `want`.
+
+    Binary VDF: integer entries are prefixed with type byte 0x02,
+    strings with 0x01.  Splitting on the typed key is reliable.
+    """
+    for chunk in data.split(b"\x02appid\x00")[1:]:
+        if len(chunk) < 4:
+            continue
+        raw = int.from_bytes(chunk[:4], "little")
+        if not id_matches(raw, want):
+            continue
+        m = re.search(rb"\x01[Aa]pp[Nn]ame\x00([^\x00]*)\x00", chunk)
+        if m and m.group(1):
+            return m.group(1).decode("utf-8", "replace")
+    return None
+
+
 class AppNameResolver:
     def __init__(self, home: str, cache_path: str):
         self.home = home
@@ -91,25 +122,15 @@ class AppNameResolver:
         return None
 
     def _from_shortcuts(self, want: int):
-        # Binary VDF: integer entries are prefixed with type byte 0x02,
-        # strings with 0x01. Splitting on the typed key is reliable.
         pat = os.path.join(self.home, ".steam/steam/userdata/*/config/shortcuts.vdf")
         for path in glob.glob(pat):
             try:
                 data = open(path, "rb").read()
             except OSError:
                 continue
-            for chunk in data.split(b"\x02appid\x00")[1:]:
-                if len(chunk) < 4:
-                    continue
-                raw = int.from_bytes(chunk[:4], "little")
-                if not (raw == want
-                        or (raw & 0xFFFFFF) == want      # screenshot folder
-                        or (want >> 32) == raw):         # clip folder
-                    continue
-                m = re.search(rb"\x01[Aa]pp[Nn]ame\x00([^\x00]*)\x00", chunk)
-                if m and m.group(1):
-                    return m.group(1).decode("utf-8", "replace")
+            name = shortcut_name_from_vdf(data, want)
+            if name:
+                return name
         return None
 
     def _from_store(self, appid: str, want: int):

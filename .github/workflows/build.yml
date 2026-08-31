@@ -37,6 +37,9 @@ jobs:
         run: |
           python3 -m py_compile main.py py_modules/deckygram/*.py
 
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -t .
+
       - name: Assemble plugin folder
         run: |
           # Zip filename carries the version (tag) or the short SHA, but the

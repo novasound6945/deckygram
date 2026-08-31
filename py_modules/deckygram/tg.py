@@ -64,6 +64,21 @@ VAAPI_DEV = "/dev/dri/renderD128"
 IMAGE_EXT = {".jpg", ".jpeg", ".png"}
 VIDEO_EXT = {".mp4", ".mkv", ".webm", ".mov"}
 
+AUDIO_BITRATE = 128_000     # generous bound for the 96k AAC track + container
+MIN_BITRATE = 400_000       # below this the video is not worth watching
+
+
+def fit_bitrate(duration_sec: int, desired: int) -> int:
+    """Highest video bitrate that keeps `duration_sec` under SIZE_TARGET."""
+    fit = SIZE_TARGET * 8 // duration_sec - AUDIO_BITRATE
+    return min(desired, fit)
+
+
+def hopeless(duration_sec: int) -> bool:
+    """True when no watchable bitrate can fit the clip under the bot limit."""
+    return duration_sec > 0 and \
+        SIZE_TARGET * 8 // duration_sec - AUDIO_BITRATE < MIN_BITRATE
+
 
 class TelegramError(Exception):
     pass
@@ -254,16 +269,13 @@ def _prepare_video(path: str, bitrate: int, fps: int, maxh: int,
         return path, None
 
     src_br = size * 8 // dur
-    target = bitrate
-    fit = SIZE_TARGET * 8 // dur - 128000
-    if fit < target:
-        target = fit
+    target = fit_bitrate(dur, bitrate)
 
     # Already light enough (within 15 % of the cap): send as-is.
     if size <= BOT_LIMIT and src_br <= target * 115 // 100:
         return path, None
 
-    if target < 400_000:
+    if target < MIN_BITRATE:
         raise Unsendable("video too long to fit under 50 MB at watchable quality")
 
     tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False, dir=TMP_DIR)
@@ -288,16 +300,31 @@ def _prepare_video(path: str, bitrate: int, fps: int, maxh: int,
 
 def send_media(token: str, chat_id: str, path: str, caption: str,
                bitrate: int = 2_000_000, fps: int = 30, maxh: int = 600,
-               progress=None, phase=None) -> None:
-    """Send one file. Raises TelegramError (retryable) or Unsendable (skip)."""
+               progress=None, phase=None, original: bool = False) -> None:
+    """Send one file. Raises TelegramError (retryable) or Unsendable (skip).
+
+    original=True sends images as documents: Telegram re-compresses every
+    sendPhoto server-side, sendDocument delivers the file byte-for-byte.
+    """
     ext = os.path.splitext(path)[1].lower()
     cleanup = None
     try:
         if ext in IMAGE_EXT:
             if os.path.getsize(path) > BOT_LIMIT:
                 raise Unsendable("image over bot limit")
-            api_call(token, "sendPhoto",
-                     {"chat_id": chat_id, "caption": caption}, {"photo": path})
+            if original:
+                # Without disable_content_type_detection Telegram sniffs the
+                # upload, recognises an image and converts it back into a
+                # compressed photo - defeating the whole point.  (Album
+                # sends force this off already, single sends must ask.)
+                api_call(token, "sendDocument",
+                         {"chat_id": chat_id, "caption": caption,
+                          "disable_content_type_detection": "true"},
+                         {"document": path})
+            else:
+                api_call(token, "sendPhoto",
+                         {"chat_id": chat_id, "caption": caption},
+                         {"photo": path})
             return
 
         if ext in VIDEO_EXT:
@@ -331,25 +358,30 @@ def send_media(token: str, chat_id: str, path: str, caption: str,
                 pass
 
 
-def send_photo_album(token: str, chat_id: str, paths: list, caption: str) -> None:
+def send_photo_album(token: str, chat_id: str, paths: list, caption: str,
+                     as_document: bool = False) -> None:
     """Send up to 10 photos as ONE album (one notification on the phone).
 
     A screenshot burst would otherwise ping the phone once per shot.
     Telegram's sendMediaGroup takes a JSON media array whose items
     reference the multipart files via attach://<name>; only the first
     item's caption is shown for the album.
+
+    as_document=True groups them as files instead (original quality; a
+    media group must be all-photo or all-document, never mixed).
     """
     if not paths:
         return
     if len(paths) == 1:
-        send_media(token, chat_id, paths[0], caption)
+        send_media(token, chat_id, paths[0], caption, original=as_document)
         return
 
+    kind = "document" if as_document else "photo"
     media = []
     files = {}
     for i, p in enumerate(paths[:10]):
-        name = "photo%d" % i
-        item = {"type": "photo", "media": "attach://" + name}
+        name = "%s%d" % (kind, i)
+        item = {"type": kind, "media": "attach://" + name}
         if i == 0:
             item["caption"] = caption
         media.append(item)
