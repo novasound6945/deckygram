@@ -81,11 +81,51 @@ def hopeless(duration_sec: int) -> bool:
 
 
 class TelegramError(Exception):
-    pass
+    """An error reported by Telegram (or a failed HTTP call).
+
+    `code` is Telegram's error_code when it gave one, `retry_after` the
+    cooldown it asked for on a 429.
+    """
+
+    def __init__(self, message, code=None, retry_after=0):
+        super().__init__(message)
+        self.code = code
+        self.retry_after = retry_after
 
 
 class Unsendable(Exception):
     """Permanently unsendable (too big even after compression) - skip, don't retry."""
+
+
+class SetupBroken(TelegramError):
+    """Telegram refuses this bot/chat outright - retrying cannot help.
+
+    Raised for a revoked token, a deleted bot, a blocked bot or a chat
+    that no longer exists.  The fix is always a human one, so the caller
+    must stop sending and tell the user instead of hammering the API.
+    """
+
+
+# Telegram's own wording for the config-level rejections.  Codes alone are
+# not enough: 400 covers both "your chat is gone" (fatal) and "this photo
+# is invalid" (skip just this file).
+_BROKEN_PHRASES = (
+    "chat not found",
+    "chat_id is empty",
+    "bot was blocked",
+    "user is deactivated",
+    "bot was kicked",
+    "peer_id_invalid",
+    "not enough rights",
+)
+
+
+def classify(description: str, code):
+    """Return the exception class to raise for a Telegram error reply."""
+    low = (description or "").lower()
+    if code in (401, 403) or any(p in low for p in _BROKEN_PHRASES):
+        return SetupBroken
+    return TelegramError
 
 
 # ----------------------------------------------------------------- HTTP layer
@@ -127,11 +167,15 @@ def api_call(token: str, method: str, fields: dict = None, files: dict = None,
         try:
             payload = json.load(e)
         except Exception:
-            raise TelegramError("HTTP %s" % e.code)
+            raise classify("", e.code)("HTTP %s" % e.code, code=e.code)
     except Exception as e:
+        # Connection-level failure: no Telegram verdict, so always retryable.
         raise TelegramError(str(e))
     if not payload.get("ok"):
-        raise TelegramError(payload.get("description", "unknown error"))
+        desc = payload.get("description", "unknown error")
+        code = payload.get("error_code")
+        retry_after = (payload.get("parameters") or {}).get("retry_after", 0)
+        raise classify(desc, code)(desc, code=code, retry_after=retry_after)
     return payload.get("result", {})
 
 

@@ -114,7 +114,8 @@ class TestAlbum(SendTestCase):
         # send_media stats the file, so this one has to exist.
         with tempfile.TemporaryDirectory() as d:
             jpg = os.path.join(d, "shot.jpg")
-            open(jpg, "wb").write(b"\xff\xd8\xff")
+            with open(jpg, "wb") as f:
+                f.write(b"\xff\xd8\xff")
             tg.send_photo_album("t", "1", [jpg], "cap", as_document=True)
         self.assertEqual(self.rec.method, "sendDocument")
 

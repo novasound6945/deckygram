@@ -92,8 +92,11 @@ gallery is never touched.
   and the re-compression only costs about 15 % of the file size.
 - Clips too long to fit Telegram's 50 MB bot limit (~30 min+) are
   skipped up front — you'll get a toast.
-- Failed sends retry automatically (30 s backoff); the panel also has
-  **Retry now** / **Skip queued** buttons.
+- Failed sends retry automatically (30 s backoff, up to 5 attempts).
+  After that Deckygram stops trying but **keeps the media** — press
+  **Retry now** once the problem is fixed. If Telegram rejects the bot
+  itself (token regenerated, bot deleted or blocked), sending is
+  suspended and the panel offers **Set up again**.
 - The plugin checks GitHub for new releases and shows an update button —
   ZIP installs don't update themselves.
 - UI follows your Steam language (English / 한국어 today — PRs welcome).
@@ -106,6 +109,7 @@ gallery is never touched.
 | "Invalid token" | Copy the whole token from BotFather (`123456:ABC...`), no spaces. |
 | "no message yet" | Open your bot in Telegram and press **START**, then tap detect again. |
 | Clips never send | Settings → **Game Recording** must not be on *Never record* (background or manual recording both work) — and a clip only exists once you **save/stop** it. Clips over ~30 min can't fit 50 MB and are skipped (toast shown). |
+| "Telegram rejected this bot" | The token was regenerated, the bot deleted, or you blocked it in Telegram. Press **Set up again**; queued media is kept and goes out once it works. |
 | Anything else | Logs live in `~/homebrew/logs/Deckygram/` — attach the newest file to a GitHub issue along with the version shown in the panel. |
 
 ---
@@ -170,8 +174,11 @@ https://github.com/novasound6945/deckygram/releases/latest/download/Deckygram.zi
   해상도는 그대로이고 재압축으로 줄어드는 용량은 약 15% 정도입니다.
 - 텔레그램 봇 한도(50MB)에 맞출 수 없는 긴 클립(약 30분+)은 처음부터
   건너뛰고 토스트로 알려줍니다.
-- 전송 실패는 30초 간격으로 자동 재시도되고, 패널에
-  **지금 재시도** / **건너뛰기** 버튼도 있습니다.
+- 전송 실패는 30초 간격으로 **최대 5회** 자동 재시도합니다. 그 뒤에는
+  시도를 멈추지만 **미디어는 보관**하므로, 문제를 해결한 뒤
+  **[지금 재시도]**를 누르면 전송됩니다. 텔레그램이 봇 자체를 거부하면
+  (토큰 재발급·봇 삭제·차단) 전송을 중단하고 **다시 설정하기** 버튼을
+  표시합니다.
 - 새 릴리스가 나오면 패널에 업데이트 버튼이 표시됩니다 — ZIP 설치는
   스스로 갱신되지 않으니까요.
 - UI는 스팀 언어를 따라갑니다 (현재 영어/한국어 — 번역 PR 환영).
@@ -184,6 +191,7 @@ https://github.com/novasound6945/deckygram/releases/latest/download/Deckygram.zi
 | "잘못된 토큰" | BotFather가 준 토큰 전체(`123456:ABC...`)를 공백 없이 복사했는지 확인. |
 | "아직 메시지가 없습니다" | 텔레그램에서 내 봇을 열어 **시작**을 누른 뒤 다시 감지. |
 | 클립이 전혀 안 옴 | 설정 → **게임 녹화**가 *녹화 안 함*이면 안 됩니다(백그라운드·수동 녹화 모두 지원). 클립은 **저장/녹화 종료**해야 생깁니다. 30분 넘는 클립은 50MB에 못 맞춰 건너뜁니다(토스트 표시). |
+| "텔레그램이 이 봇을 거부했습니다" | 토큰이 재발급되었거나, 봇을 삭제했거나, 텔레그램에서 봇을 차단한 경우입니다. **다시 설정하기**를 누르세요. 대기 중이던 미디어는 보관되어 있다가 정상화되면 전송됩니다. |
 | 그 외 | 로그는 `~/homebrew/logs/Deckygram/` 에 있습니다 — 최신 파일과 패널의 버전을 GitHub 이슈에 첨부해 주세요. |
 
 ---

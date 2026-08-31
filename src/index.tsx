@@ -91,6 +91,8 @@ type Status = {
   enabled: boolean;
   version: string;
   ffmpeg_ok: boolean;
+  setup_broken: string;
+  stalled: number;
   update_available: boolean;
   latest: string;
   url: string;
@@ -328,6 +330,21 @@ function Content() {
   return (
     <>
       <PanelSection>
+        {status?.setup_broken ? (
+          <>
+            <PanelSectionRow>
+              <Field
+                label={t("setup_broken")}
+                description={t("setup_broken_desc", { why: status.setup_broken })}
+              />
+            </PanelSectionRow>
+            <PanelSectionRow>
+              <ButtonItem layout="below" onClick={() => setShowWizard(true)}>
+                {t("setup_broken_fix")}
+              </ButtonItem>
+            </PanelSectionRow>
+          </>
+        ) : null}
         {status?.update_available ? (
           <PanelSectionRow>
             <ButtonItem
@@ -405,6 +422,11 @@ function Content() {
             <PanelSectionRow>
               <Field label={t("queued")} description={queueSummary(status)} />
             </PanelSectionRow>
+            {status.stalled > 0 ? (
+              <PanelSectionRow>
+                <Field description={t("stalled", { n: status.stalled, max: 5 })} />
+              </PanelSectionRow>
+            ) : null}
             <PanelSectionRow>
               <ButtonItem layout="below" onClick={async () => {
                 await retryQueue();

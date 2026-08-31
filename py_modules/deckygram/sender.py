@@ -20,6 +20,8 @@ from . import captions, tg
 SETTLE_SEC = 3          # wait after last write before sending
 CLIP_SETTLE_SEC = 30    # clips: recording may still be in progress
 RETRY_SEC = 30          # backoff before retrying a failed send
+MAX_ATTEMPTS = 5        # give up (but keep the item) after this many tries
+RECHECK_SEC = 600       # re-test a broken setup this often
 
 
 class Sender:
@@ -36,6 +38,12 @@ class Sender:
         # would otherwise fail-and-retry forever.  Screenshots do not need
         # it, so we just disable the clip pipeline and say why.
         self.ffmpeg_ok = bool(shutil.which("ffmpeg") and shutil.which("ffprobe"))
+        # Set when Telegram rejects the bot/chat itself.  Sending is then
+        # suspended (retrying cannot help) until the user fixes it; we
+        # re-test every RECHECK_SEC so a bot unblocked inside Telegram -
+        # which changes no setting here - recovers on its own.
+        self._broken_at = 0.0
+        self._paused_until = 0.0    # honours Telegram's 429 retry_after
 
     @staticmethod
     def _friendly(e):
@@ -46,6 +54,44 @@ class Sender:
                 or "connection" in low or "unreachable" in low:
             return "Network error - will retry automatically"
         return msg[:200]
+
+    # ------------------------------------------------------- failure handling
+
+    def blocked(self):
+        """True while sending is suspended (broken setup or a 429 cooldown)."""
+        now = time.time()
+        if now < self._paused_until:
+            return True
+        if self._broken_at and now - self._broken_at < RECHECK_SEC:
+            return True
+        return False
+
+    def clear_broken(self):
+        """Called when the token/chat changes - give it another go at once."""
+        self._broken_at = 0.0
+        self.status["setup_broken"] = ""
+
+    def _note_failure(self, e):
+        """Record a failed send; returns True if it was a fatal setup error."""
+        self.status["failed"] += 1
+        if isinstance(e, tg.SetupBroken):
+            first = not self.status.get("setup_broken")
+            self.status["setup_broken"] = str(e)[:200]
+            self.status["last_error"] = str(e)[:200]
+            self._broken_at = time.time()
+            self.log("telegram rejected this bot/chat: %s "
+                     "(sending suspended, re-checking in %ds)" % (e, RECHECK_SEC))
+            if first:
+                # Tell the user once, not every 30 seconds.
+                self.notify("broken", "Deckygram needs setting up again",
+                            "Telegram rejected the bot: %s" % e)
+            return True
+        retry_after = getattr(e, "retry_after", 0)
+        if retry_after:
+            self._paused_until = time.time() + retry_after + 1
+            self.log("rate limited by telegram; pausing %ds" % retry_after)
+        self.status["last_error"] = self._friendly(e)
+        return False
 
     # ---------------------------------------------------------------- deleting
 
@@ -124,13 +170,22 @@ class Sender:
             self.qs.mark_sent(path)
             self.log("skipped (%s): %s" % (e, os.path.basename(path)))
         except Exception as e:
-            self.status["failed"] += 1
-            self.status["last_error"] = self._friendly(e)
-            # Re-queue with a short backoff so a Wi-Fi hiccup recovers in
-            # ~30 s instead of waiting for the 10-minute full scan.
-            self.qs.queue(path, time.time() + RETRY_SEC)
-            self.log("failed (retry in %ds): %s - %s"
-                     % (RETRY_SEC, os.path.basename(path), e))
+            fatal = self._note_failure(e)
+            tries = self.qs.note_attempt(path)
+            if fatal or tries >= MAX_ATTEMPTS:
+                # Stop hammering.  The file is NOT marked sent: it stays in
+                # the queue so "Retry now" (or a fixed setup) can still
+                # deliver it.
+                self.qs.give_up(path)
+                self.log("giving up after %d attempts: %s - %s"
+                         % (tries, os.path.basename(path), e))
+            else:
+                # Re-queue with a short backoff so a Wi-Fi hiccup recovers in
+                # ~30 s instead of waiting for the 10-minute full scan.
+                self.qs.queue(path, time.time() + RETRY_SEC)
+                self.log("failed (attempt %d/%d, retry in %ds): %s - %s"
+                         % (tries, MAX_ATTEMPTS, RETRY_SEC,
+                            os.path.basename(path), e))
         finally:
             self.status["current"] = ""
             self.status["progress"] = -1
@@ -189,13 +244,14 @@ class Sender:
                 self.notify("sent", "Sent to Telegram", caption)
         except Exception as e:
             # Fall back to per-file sends (with their own retry) next tick.
-            self.status["failed"] += 1
-            self.status["last_error"] = self._friendly(e)
+            fatal = self._note_failure(e)
             with self.qs.lock:
                 for p in files:
                     self.qs.no_album.add(p)
-                    self.qs.pending[p] = time.time() + RETRY_SEC
-            self.log("album failed (%s) - will retry individually" % e)
+                    if not fatal:
+                        self.qs.pending[p] = time.time() + RETRY_SEC
+            self.log("album failed (%s)%s" %
+                     (e, "" if fatal else " - will retry individually"))
         finally:
             self.status["current"] = ""
 
@@ -296,10 +352,18 @@ class Sender:
                 self.notify("skipped", "Clip not sent",
                             "Too long to fit under Telegram's 50 MB bot limit")
         except Exception as e:
-            self.status["failed"] += 1
-            self.status["last_error"] = self._friendly(e)
-            self.qs.clip_retry_at[clip_id] = time.time() + RETRY_SEC * 2
-            self.log("clip failed (retry in %ds): %s - %s" % (RETRY_SEC * 2, clip_id, e))
+            fatal = self._note_failure(e)
+            tries = self.qs.note_attempt(clip_id)
+            if fatal or tries >= MAX_ATTEMPTS:
+                self.qs.give_up(clip_id)
+                # Far future: only an explicit "Retry now" revives it.
+                self.qs.clip_retry_at[clip_id] = time.time() + 10 ** 9
+                self.log("clip: giving up after %d attempts: %s - %s"
+                         % (tries, clip_id, e))
+            else:
+                self.qs.clip_retry_at[clip_id] = time.time() + RETRY_SEC * 2
+                self.log("clip failed (attempt %d/%d, retry in %ds): %s - %s"
+                         % (tries, MAX_ATTEMPTS, RETRY_SEC * 2, clip_id, e))
         finally:
             self.status["current"] = ""
             self.status["progress"] = -1

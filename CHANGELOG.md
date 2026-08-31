@@ -2,6 +2,32 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.1.6
+
+### Changed / 변경
+- **Sending failures no longer retry forever.** Each item now gets up to
+  **5 attempts**; after that it stops trying and the panel says so. The
+  media is *not* written off — it stays on the Deck and in the queue, so
+  **Retry now** (or a repaired setup) still delivers it, even across a
+  restart.
+  **전송 실패 시 무한 재시도하지 않습니다.** 항목당 **최대 5회**까지만
+  시도하고, 이후에는 중단하고 패널에 표시합니다. 미디어는 버려지지 않고
+  기기와 대기열에 그대로 남아, **[지금 재시도]**를 누르거나 설정을
+  고치면 (재시작 후에도) 전송됩니다.
+- **Telegram's own rejections are told apart from network errors.** A
+  revoked token, a deleted bot, a blocked bot or a missing chat now
+  suspends sending immediately — retrying cannot fix those — and shows a
+  **Telegram rejected this bot** warning with a *Set up again* button.
+  Recovery is automatic: it re-tests every 10 minutes, and any successful
+  setup step clears it.
+  **텔레그램의 거부와 네트워크 오류를 구분합니다.** 토큰 재발급, 봇 삭제,
+  봇 차단, 대화 없음은 재시도로 해결되지 않으므로 즉시 전송을 중단하고
+  **다시 설정하기** 버튼과 함께 경고를 표시합니다. 10분마다 자동으로
+  재확인하며, 설정을 고치면 바로 복구됩니다.
+- Rate limiting (429) now honours the wait Telegram asks for instead of
+  retrying straight into it.
+  전송 제한(429)에 걸리면 텔레그램이 요청한 대기 시간을 지킵니다.
+
 ## v0.1.5
 
 ### Added / 추가

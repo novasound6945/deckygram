@@ -19,6 +19,7 @@ class QueueState:
     def __init__(self, state_dir: str):
         self.sent_path = os.path.join(state_dir, "sent.list")
         self.clips_path = os.path.join(state_dir, "clips_done.list")
+        self.stalled_path = os.path.join(state_dir, "stalled.list")
         self.stats_path = os.path.join(state_dir, "stats.txt")
         self.sent = self._load(self.sent_path)
         self.clips_done = self._load(self.clips_path)
@@ -28,6 +29,12 @@ class QueueState:
         self.pending = {}        # path -> earliest-send timestamp base
         self.no_album = set()    # paths that failed as an album once
         self.clip_retry_at = {}  # clip_id -> not-before timestamp
+        self.attempts = {}       # item -> failed send count
+        # Items we stopped retrying automatically.  Persisted, because a
+        # plugin restart seeds everything on disk as "already handled" -
+        # without this list, media held back by a broken setup would be
+        # written off silently instead of waiting for "Retry now".
+        self.gave_up = self._load(self.stalled_path)
 
     # ------------------------------------------------------------ list files
 
@@ -47,11 +54,22 @@ class QueueState:
         if path not in self.sent:
             self.sent.add(path)
             self._record(self.sent_path, path)
+        self._forget(path)
 
     def mark_clip_done(self, clip_id: str) -> None:
         if clip_id not in self.clips_done:
             self.clips_done.add(clip_id)
             self._record(self.clips_path, clip_id)
+        self._forget(clip_id)
+
+    def _forget(self, item: str) -> None:
+        """Drop retry bookkeeping for an item that is now settled."""
+        was_stalled = item in self.gave_up
+        with self.lock:
+            self.attempts.pop(item, None)
+            self.gave_up.discard(item)
+        if was_stalled:
+            self._rewrite_stalled()
 
     # --------------------------------------------------------------- counter
 
@@ -71,6 +89,47 @@ class QueueState:
         except OSError:
             pass
         return self.sent_count
+
+    # ---------------------------------------------------------- retry budget
+
+    def note_attempt(self, item: str) -> int:
+        """Count one failed send of `item`; returns the running total."""
+        with self.lock:
+            n = self.attempts.get(item, 0) + 1
+            self.attempts[item] = n
+            return n
+
+    def give_up(self, item: str) -> None:
+        """Stop retrying automatically - but keep the item queued.
+
+        Nothing is marked as sent, so the media survives; only the timer
+        stops.  "Retry now" (or a repaired setup) revives it.
+        """
+        new = item not in self.gave_up
+        with self.lock:
+            self.gave_up.add(item)
+            self.pending.pop(item, None)
+        if new:
+            self._record(self.stalled_path, item)
+
+    def revive_all(self) -> None:
+        """Manual retry: forget the retry budget for everything."""
+        with self.lock:
+            self.attempts.clear()
+            self.gave_up.clear()
+        self._rewrite_stalled()
+
+    def _rewrite_stalled(self) -> None:
+        with self.lock:
+            try:
+                with open(self.stalled_path, "w", encoding="utf-8") as f:
+                    for item in sorted(self.gave_up):
+                        f.write(item + "\n")
+            except OSError:
+                pass
+
+    def stalled(self) -> int:
+        return len(self.gave_up)
 
     # ------------------------------------------------------------- the queue
 

@@ -52,7 +52,8 @@ class Watcher:
         self.status = {"running": False, "watching": 0,
                        "sent": self.qs.sent_count,
                        "failed": 0, "last_sent": "", "last_error": "",
-                       "current": "", "progress": -1}
+                       "current": "", "progress": -1,
+                       "setup_broken": "", "stalled": 0}
         self.sender = Sender(self.qs, state_dir, settings_getter, resolver,
                              notify=notify, log=self.log, status=self.status)
         self.status["ffmpeg_ok"] = self.sender.ffmpeg_ok
@@ -94,17 +95,30 @@ class Watcher:
         return out
 
     def seed_existing(self):
-        """Mark everything currently on disk as already sent (first run)."""
-        n = 0
+        """Mark everything currently on disk as already sent (first run).
+
+        Items that previously ran out of retries are the one exception:
+        they were captured while sending was ON and we promised to keep
+        them, so they are re-queued instead of being written off.
+        """
+        n = held = 0
         for f in self._collect_media():
-            if f not in self.qs.sent:
-                self.qs.mark_sent(f)
-                n += 1
+            if f in self.qs.sent:
+                continue
+            if f in self.qs.gave_up:
+                self.qs.queue(f, 0)      # eligible immediately
+                held += 1
+                continue
+            self.qs.mark_sent(f)
+            n += 1
         for d in self._all_clip_dirs():
             cid = os.path.basename(d)
-            if cid not in self.qs.clips_done:
-                self.qs.mark_clip_done(cid)
-                n += 1
+            if cid in self.qs.clips_done or cid in self.qs.gave_up:
+                continue
+            self.qs.mark_clip_done(cid)
+            n += 1
+        if held:
+            self.log("%d item(s) kept from a failed send - retrying" % held)
         return n
 
     # ------------------------------------------------------------- UI surface
@@ -159,7 +173,13 @@ class Watcher:
         return dict(result)
 
     def retry_now(self):
-        """Manual retry: make every unsent item eligible immediately."""
+        """Manual retry: make every unsent item eligible immediately.
+
+        Also forgives the retry budget and any suspended setup, so this
+        one button covers "I fixed my bot" as well as "try again now".
+        """
+        self.qs.revive_all()
+        self.sender.clear_broken()
         now = time.time() - SETTLE_SEC
         n = 0
         with self.qs.lock:
@@ -169,12 +189,15 @@ class Watcher:
                     n += 1
         self.qs.clip_retry_at = {}
         self.status["last_error"] = ""
+        self.status["stalled"] = 0
         return n
 
     def skip_queued(self):
         """Manual pass: mark everything currently waiting as handled."""
         n = 0
         self.qs.clear_pending()
+        self.qs.revive_all()
+        self.status["stalled"] = 0
         for f in self._collect_media():
             if f not in self.qs.sent:
                 self.qs.mark_sent(f)
@@ -248,16 +271,20 @@ class Watcher:
                     self.qs.queue(full)
 
             now = time.time()
-            ready = self.qs.take_ready(now, SETTLE_SEC, tg.IMAGE_EXT)
-            self.sender.process_batch(ready)
+            # Suspended (rejected bot/chat, or a 429 cooldown): keep
+            # watching and queueing, just do not call Telegram.
+            if not self.sender.blocked():
+                ready = self.qs.take_ready(now, SETTLE_SEC, tg.IMAGE_EXT)
+                self.sender.process_batch(ready)
 
-            # Clips are directories full of DASH fragments, so inotify on the
-            # clip root only tells us "a folder appeared" - poll them on a
-            # short interval instead of waiting for the big full scan.
-            if now - last_clip_scan > CLIP_SCAN_SEC:
-                for d in self._all_clip_dirs():
-                    self.sender.process_clip(d)
-                last_clip_scan = now
+                # Clips are directories full of DASH fragments, so inotify on
+                # the clip root only tells us "a folder appeared" - poll them
+                # on a short interval instead of waiting for the full scan.
+                if now - last_clip_scan > CLIP_SCAN_SEC:
+                    for d in self._all_clip_dirs():
+                        self.sender.process_clip(d)
+                    last_clip_scan = now
+            self.status["stalled"] = self.qs.stalled()
 
             if now - last_rewatch > 60:
                 add_watches()

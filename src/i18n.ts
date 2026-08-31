@@ -57,6 +57,11 @@ const en: Dict = {
   update_available: "Update available: {v}",
   open_release: "Open download page",
   ffmpeg_missing: "ffmpeg not found on this system - clip sending is disabled (screenshots still work)",
+  setup_broken: "Telegram rejected this bot",
+  setup_broken_desc:
+    "Sending is paused - retrying cannot fix this. The bot may have been deleted, its token regenerated, or you blocked it in Telegram. Reason: {why}",
+  setup_broken_fix: "Set up again",
+  stalled: "{n} items gave up after {max} tries - still on the Deck. Fix the problem, then press Retry now.",
   now_working: "Working on",
   queued: "Waiting to send",
   queue_images: "{n} screenshot(s) ({size})",
@@ -123,6 +128,11 @@ const ko: Dict = {
   update_available: "업데이트 있음: {v}",
   open_release: "다운로드 페이지 열기",
   ffmpeg_missing: "이 시스템에 ffmpeg가 없어 클립 전송이 비활성화되었습니다 (스크린샷은 정상 동작)",
+  setup_broken: "텔레그램이 이 봇을 거부했습니다",
+  setup_broken_desc:
+    "전송을 일시 중단했습니다 - 재시도로는 해결되지 않습니다. 봇이 삭제되었거나, 토큰이 재발급되었거나, 텔레그램에서 봇을 차단했을 수 있습니다. 사유: {why}",
+  setup_broken_fix: "다시 설정하기",
+  stalled: "{max}회 시도 후 중단된 항목 {n}개 - 기기에는 그대로 있습니다. 문제를 해결한 뒤 [지금 재시도]를 누르세요.",
   now_working: "작업 중",
   queued: "전송 대기",
   queue_images: "스크린샷 {n}장 ({size})",

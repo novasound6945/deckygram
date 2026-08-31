@@ -96,6 +96,7 @@ class Plugin:
         s = self._load()
         s["token"] = token
         self._save(s)
+        self.watcher.sender.clear_broken()   # a new token deserves a new try
         return {"ok": True, "bot_username": me.get("username", "")}
 
     async def detect_chat(self) -> dict:
@@ -111,6 +112,7 @@ class Plugin:
         chat_id, name = found
         s["chat_id"] = chat_id
         self._save(s)
+        self.watcher.sender.clear_broken()
         return {"ok": True, "chat_id": chat_id, "name": name}
 
     async def send_test(self) -> dict:
@@ -122,6 +124,8 @@ class Plugin:
                         {"chat_id": s["chat_id"],
                          "text": "Deckygram connected. Screenshots will arrive here."},
                         timeout=15)
+            # A working test means whatever Telegram objected to is fixed.
+            self.watcher.sender.clear_broken()
             return {"ok": True}
         except tg.TelegramError as e:
             return {"ok": False, "error": str(e)}
@@ -134,6 +138,7 @@ class Plugin:
         s = self._load()
         s["token"] = token.strip()
         self._save(s)
+        self.watcher.sender.clear_broken()
         return me.get("username", "")
 
     async def start_pairing(self) -> dict:
