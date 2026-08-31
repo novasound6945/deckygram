@@ -156,6 +156,12 @@ const en: Dict = {
   send_test: "Send test message",
   failed_prefix: "Failed: ",
   rerun_setup: "Setup wizard",
+  tidy_media: "Tidy up Steam's media list",
+  tidy_desc:
+    "Removes entries Steam still shows for media that is gone - the broken tiles in the Media tab - and any files left behind by an interrupted send.",
+  tidy_running: "Tidying...",
+  tidy_done: "Tidied {n} item(s)",
+  tidy_clean: "Nothing to tidy",
   no_token: "no token",
 };
 
@@ -298,6 +304,12 @@ const ko: Dict = {
   send_test: "테스트 메시지 보내기",
   failed_prefix: "실패: ",
   rerun_setup: "설정 마법사",
+  tidy_media: "스팀 미디어 목록 정리",
+  tidy_desc:
+    "이미 지워진 미디어인데 스팀 목록에 남아 깨진 타일로 보이는 항목과, 전송이 중단되며 남은 임시 파일을 정리합니다.",
+  tidy_running: "정리 중...",
+  tidy_done: "{n}개 정리했습니다",
+  tidy_clean: "정리할 항목이 없습니다",
   no_token: "토큰 없음",
 };
 
@@ -337,7 +349,7 @@ const de: Dict = {
   only_new_note_dc:
     "Es wird nur gesendet, was aufgenommen wurde, während Senden AN war - alles während der Pause Aufgenommene bleibt auf dem Deck. Ohne Verbindung wird automatisch erneut gesendet, sobald du wieder online bist. Clips sind durch das Upload-Limit deines Discord-Servers begrenzt (10 MB auf einem kostenlosen Server); alles über ca. 3 Minuten wird übersprungen und per Hinweis gemeldet.",
   delete_after_desc_dc:
-    "Schafft Platz, sobald die Medien sicher in Discord sind. Entfernte Elemente verschwinden aus der Steam-Galerie.",
+    "Schafft Platz, sobald die Medien sicher in Discord sind. Entfernte Elemente verschwinden aus der Steam-Galerie. In der Galerie ausgewählte Medien werden nie gelöscht.",
   setup_broken_dc: "Discord hat diesen Webhook abgelehnt",
   setup_broken_desc_dc:
     "Senden ist pausiert - erneute Versuche helfen nicht. Vermutlich wurde der Webhook oder sein Kanal gelöscht. Grund: {why}",
@@ -390,7 +402,7 @@ const de: Dict = {
     "Es wird nur gesendet, was aufgenommen wurde, während Senden AN war - alles während der Pause Aufgenommene bleibt auf dem Deck. Ohne Verbindung wird automatisch erneut gesendet, sobald du wieder online bist. Clips, die nicht unter Telegrams Bot-Limit von 50 MB passen, werden übersprungen (du erhältst einen Hinweis).",
   delete_after: "Nach dem Senden vom Deck löschen",
   delete_after_desc:
-    "Schafft Platz, sobald die Medien sicher in Telegram sind. Entfernte Elemente verschwinden aus der Steam-Galerie.",
+    "Schafft Platz, sobald die Medien sicher in Telegram sind. Entfernte Elemente verschwinden aus der Steam-Galerie. In der Galerie ausgewählte Medien werden nie gelöscht.",
   status: "Status",
   version: "Version",
   update_available: "Update verfügbar: {v}",
@@ -440,6 +452,12 @@ const de: Dict = {
   send_test: "Testnachricht senden",
   failed_prefix: "Fehlgeschlagen: ",
   rerun_setup: "Einrichtungsassistent",
+  tidy_media: "Steams Medienliste aufräumen",
+  tidy_desc:
+    "Entfernt Einträge, die Steam für längst gelöschte Medien noch anzeigt - die kaputten Kacheln im Medien-Tab - und Reste eines abgebrochenen Sendevorgangs.",
+  tidy_running: "Räume auf...",
+  tidy_done: "{n} Element(e) aufgeräumt",
+  tidy_clean: "Nichts aufzuräumen",
   no_token: "kein Token",
 };
 
@@ -479,7 +497,7 @@ const fr: Dict = {
   only_new_note_dc:
     "Seuls les médias capturés pendant que l'envoi est ACTIVÉ sont envoyés - tout ce qui est pris en pause reste sur le Deck. Hors ligne, les envois sont réessayés automatiquement dès le retour de la connexion. Les clips sont limités par la taille d'envoi de votre serveur Discord (10 Mo sur un serveur gratuit) ; au-delà d'environ 3 minutes, ils sont ignorés avec une notification.",
   delete_after_desc_dc:
-    "Libère de l'espace une fois les médias bien arrivés sur Discord. Les éléments supprimés disparaissent de la galerie Steam.",
+    "Libère de l'espace une fois les médias bien arrivés sur Discord. Les éléments supprimés disparaissent de la galerie Steam. Les médias choisis dans la galerie ne sont jamais supprimés.",
   setup_broken_dc: "Discord a refusé ce webhook",
   setup_broken_desc_dc:
     "L'envoi est en pause - réessayer ne changera rien. Le webhook ou son salon a probablement été supprimé. Raison : {why}",
@@ -532,7 +550,7 @@ const fr: Dict = {
     "Seuls les médias capturés pendant que l'envoi est ACTIVÉ sont envoyés - tout ce qui est pris en pause reste sur le Deck. Hors ligne, les envois sont réessayés automatiquement dès le retour de la connexion. Les clips trop longs pour tenir sous la limite de 50 Mo des bots Telegram sont ignorés (vous recevrez une notification).",
   delete_after: "Supprimer du Deck après l'envoi",
   delete_after_desc:
-    "Libère de l'espace une fois les médias bien arrivés sur Telegram. Les éléments supprimés disparaissent de la galerie Steam.",
+    "Libère de l'espace une fois les médias bien arrivés sur Telegram. Les éléments supprimés disparaissent de la galerie Steam. Les médias choisis dans la galerie ne sont jamais supprimés.",
   status: "État",
   version: "Version",
   update_available: "Mise à jour disponible : {v}",
@@ -582,6 +600,12 @@ const fr: Dict = {
   send_test: "Envoyer un message de test",
   failed_prefix: "Échec : ",
   rerun_setup: "Assistant de configuration",
+  tidy_media: "Nettoyer la liste des médias de Steam",
+  tidy_desc:
+    "Supprime les entrées que Steam affiche encore pour des médias supprimés - les vignettes cassées de l'onglet Médias - ainsi que les fichiers restants d'un envoi interrompu.",
+  tidy_running: "Nettoyage...",
+  tidy_done: "{n} élément(s) nettoyé(s)",
+  tidy_clean: "Rien à nettoyer",
   no_token: "aucun jeton",
 };
 
@@ -621,7 +645,7 @@ const ru: Dict = {
   only_new_note_dc:
     "Отправляется только то, что снято при включённой отправке - снятое во время паузы остаётся на Deck. Без сети отправка автоматически повторится, когда связь вернётся. Размер клипов ограничен лимитом вашего сервера Discord (10 МБ на бесплатном), поэтому всё длиннее примерно 3 минут пропускается с уведомлением.",
   delete_after_desc_dc:
-    "Освобождает место после того, как файлы надёжно попали в Discord. Удалённые файлы исчезают и из галереи Steam.",
+    "Освобождает место после того, как файлы надёжно попали в Discord. Удалённые файлы исчезают и из галереи Steam. Файлы, выбранные вручную в галерее, не удаляются.",
   setup_broken_dc: "Discord отклонил этот вебхук",
   setup_broken_desc_dc:
     "Отправка приостановлена - повторные попытки не помогут. Скорее всего, вебхук или его канал удалили. Причина: {why}",
@@ -674,7 +698,7 @@ const ru: Dict = {
     "Отправляется только то, что снято при включённой отправке - снятое во время паузы остаётся на Deck. Без сети отправка автоматически повторится, когда связь вернётся. Клипы, которые не помещаются в лимит ботов Telegram (50 МБ), пропускаются - вы получите уведомление.",
   delete_after: "Удалять с Deck после отправки",
   delete_after_desc:
-    "Освобождает место после того, как файлы надёжно попали в Telegram. Удалённые файлы исчезают и из галереи Steam.",
+    "Освобождает место после того, как файлы надёжно попали в Telegram. Удалённые файлы исчезают и из галереи Steam. Файлы, выбранные вручную в галерее, не удаляются.",
   status: "Состояние",
   version: "Версия",
   update_available: "Доступно обновление: {v}",
@@ -724,6 +748,12 @@ const ru: Dict = {
   send_test: "Отправить тестовое сообщение",
   failed_prefix: "Ошибка: ",
   rerun_setup: "Мастер настройки",
+  tidy_media: "Прибраться в списке медиа Steam",
+  tidy_desc:
+    "Убирает записи, которые Steam всё ещё показывает для удалённых файлов - те самые битые плитки во вкладке «Медиа» - и остатки прерванной отправки.",
+  tidy_running: "Уборка...",
+  tidy_done: "Прибрано: {n}",
+  tidy_clean: "Убирать нечего",
   no_token: "нет токена",
 };
 
@@ -763,7 +793,7 @@ const ptBr: Dict = {
   only_new_note_dc:
     "Só é enviado o que for capturado com o envio LIGADO - o que for capturado durante a pausa fica no Deck. Sem conexão, os envios são repetidos automaticamente assim que você voltar a ficar online. Os clipes seguem o limite de upload do seu servidor do Discord (10 MB em servidor gratuito), então acima de cerca de 3 minutos eles são ignorados com um aviso.",
   delete_after_desc_dc:
-    "Libera espaço depois que a mídia estiver segura no Discord. Os itens removidos somem da galeria da Steam.",
+    "Libera espaço depois que a mídia estiver segura no Discord. Os itens removidos somem da galeria da Steam. Mídias escolhidas na galeria nunca são apagadas.",
   setup_broken_dc: "O Discord recusou este webhook",
   setup_broken_desc_dc:
     "O envio está pausado - tentar de novo não resolve. Provavelmente o webhook ou o canal dele foi excluído. Motivo: {why}",
@@ -816,7 +846,7 @@ const ptBr: Dict = {
     "Só é enviado o que for capturado com o envio LIGADO - o que for capturado durante a pausa fica no Deck. Sem conexão, os envios são repetidos automaticamente assim que você voltar a ficar online. Clipes que não couberem no limite de 50 MB dos bots do Telegram são ignorados (você recebe um aviso).",
   delete_after: "Excluir do Deck após enviar",
   delete_after_desc:
-    "Libera espaço depois que a mídia estiver segura no Telegram. Os itens removidos somem da galeria da Steam.",
+    "Libera espaço depois que a mídia estiver segura no Telegram. Os itens removidos somem da galeria da Steam. Mídias escolhidas na galeria nunca são apagadas.",
   status: "Status",
   version: "Versão",
   update_available: "Atualização disponível: {v}",
@@ -866,6 +896,12 @@ const ptBr: Dict = {
   send_test: "Enviar mensagem de teste",
   failed_prefix: "Falhou: ",
   rerun_setup: "Assistente de configuração",
+  tidy_media: "Limpar a lista de mídia da Steam",
+  tidy_desc:
+    "Remove entradas que a Steam ainda mostra para mídias já apagadas - os blocos quebrados na aba Mídia - e sobras de um envio interrompido.",
+  tidy_running: "Limpando...",
+  tidy_done: "{n} item(ns) limpo(s)",
+  tidy_clean: "Nada a limpar",
   no_token: "sem token",
 };
 
@@ -905,7 +941,7 @@ const pl: Dict = {
   only_new_note_dc:
     "Wysyłane jest tylko to, co nagrano przy WŁĄCZONYM wysyłaniu - materiały z czasu pauzy zostają na Decku. Bez internetu wysyłka ponowi się automatycznie po powrocie połączenia. Klipy ogranicza limit wysyłania Twojego serwera Discord (10 MB na darmowym), więc dłuższe niż około 3 minuty są pomijane z powiadomieniem.",
   delete_after_desc_dc:
-    "Zwalnia miejsce, gdy pliki bezpiecznie trafią na Discorda. Usunięte pozycje znikają też z galerii Steam.",
+    "Zwalnia miejsce, gdy pliki bezpiecznie trafią na Discorda. Usunięte pozycje znikają też z galerii Steam. Materiały wybrane w galerii nie są nigdy usuwane.",
   setup_broken_dc: "Discord odrzucił ten webhook",
   setup_broken_desc_dc:
     "Wysyłanie wstrzymane - ponawianie tego nie naprawi. Prawdopodobnie usunięto webhook albo jego kanał. Powód: {why}",
@@ -958,7 +994,7 @@ const pl: Dict = {
     "Wysyłane jest tylko to, co nagrano przy WŁĄCZONYM wysyłaniu - materiały z czasu pauzy zostają na Decku. Bez internetu wysyłka ponowi się automatycznie po powrocie połączenia. Klipy, które nie mieszczą się w limicie 50 MB dla botów Telegrama, są pomijane (dostaniesz powiadomienie).",
   delete_after: "Usuwaj z Decka po wysłaniu",
   delete_after_desc:
-    "Zwalnia miejsce, gdy pliki bezpiecznie trafią na Telegrama. Usunięte pozycje znikają też z galerii Steam.",
+    "Zwalnia miejsce, gdy pliki bezpiecznie trafią na Telegrama. Usunięte pozycje znikają też z galerii Steam. Materiały wybrane w galerii nie są nigdy usuwane.",
   status: "Stan",
   version: "Wersja",
   update_available: "Dostępna aktualizacja: {v}",
@@ -1008,6 +1044,12 @@ const pl: Dict = {
   send_test: "Wyślij wiadomość testową",
   failed_prefix: "Niepowodzenie: ",
   rerun_setup: "Kreator konfiguracji",
+  tidy_media: "Uporządkuj listę multimediów Steam",
+  tidy_desc:
+    "Usuwa wpisy, które Steam wciąż pokazuje dla skasowanych plików - te uszkodzone kafelki w zakładce Multimedia - oraz pozostałości po przerwanej wysyłce.",
+  tidy_running: "Porządkowanie...",
+  tidy_done: "Uporządkowano: {n}",
+  tidy_clean: "Nie ma czego porządkować",
   no_token: "brak tokenu",
 };
 
@@ -1047,7 +1089,7 @@ const tr: Dict = {
   only_new_note_dc:
     "Yalnızca gönderim AÇIKken alınanlar gönderilir - duraklatmadayken alınanlar Deck'te kalır. Çevrimdışıysan, çevrimiçi olunca gönderimler otomatik yinelenir. Klipler Discord sunucunun yükleme sınırına tabidir (ücretsiz sunucuda 10 MB); bu yüzden yaklaşık 3 dakikayı aşanlar bir bildirimle atlanır.",
   delete_after_desc_dc:
-    "Ortam Discord'a güvenle ulaştıktan sonra yer açar. Silinenler Steam galerisinden de kaybolur.",
+    "Ortam Discord'a güvenle ulaştıktan sonra yer açar. Silinenler Steam galerisinden de kaybolur. Galeriden kendin seçtiklerin asla silinmez.",
   setup_broken_dc: "Discord bu webhook'u reddetti",
   setup_broken_desc_dc:
     "Gönderim duraklatıldı - yeniden denemek bunu düzeltmez. Büyük olasılıkla webhook ya da kanalı silinmiş. Neden: {why}",
@@ -1100,7 +1142,7 @@ const tr: Dict = {
     "Yalnızca gönderim AÇIKken alınanlar gönderilir - duraklatmadayken alınanlar Deck'te kalır. Çevrimdışıysan, çevrimiçi olunca gönderimler otomatik yinelenir. Telegram'ın 50 MB'lık bot sınırına sığmayacak kadar uzun klipler atlanır (bir bildirim alırsın).",
   delete_after: "Gönderdikten sonra Deck'ten sil",
   delete_after_desc:
-    "Ortam Telegram'a güvenle ulaştıktan sonra yer açar. Silinenler Steam galerisinden de kaybolur.",
+    "Ortam Telegram'a güvenle ulaştıktan sonra yer açar. Silinenler Steam galerisinden de kaybolur. Galeriden kendin seçtiklerin asla silinmez.",
   status: "Durum",
   version: "Sürüm",
   update_available: "Güncelleme var: {v}",
@@ -1150,6 +1192,12 @@ const tr: Dict = {
   send_test: "Sınama iletisi gönder",
   failed_prefix: "Başarısız: ",
   rerun_setup: "Kurulum sihirbazı",
+  tidy_media: "Steam'in ortam listesini toparla",
+  tidy_desc:
+    "Silinmiş ortamlar için Steam'in hâlâ gösterdiği kayıtları - Ortam sekmesindeki bozuk karoları - ve yarım kalmış bir gönderimden artan dosyaları temizler.",
+  tidy_running: "Toparlanıyor...",
+  tidy_done: "{n} öğe toparlandı",
+  tidy_clean: "Toparlanacak bir şey yok",
   no_token: "jeton yok",
 };
 
@@ -1189,7 +1237,7 @@ const zhCn: Dict = {
   only_new_note_dc:
     "只有在发送开启期间捕获的内容才会被发送——暂停期间拍摄的内容会留在 Deck 上。离线时，恢复联网后会自动重试。视频片段受你的 Discord 服务器上传上限限制（免费服务器为 10 MB），因此超过约 3 分钟的片段会被跳过并弹出提示。",
   delete_after_desc_dc:
-    "在内容安全送达 Discord 后释放空间。删除的项目也会从 Steam 图库中消失。",
+    "在内容安全送达 Discord 后释放空间。删除的项目也会从 Steam 图库中消失。 在图库中手动挑选的内容不会被删除。",
   setup_broken_dc: "Discord 拒绝了此 Webhook",
   setup_broken_desc_dc:
     "发送已暂停——重试无法解决。该 Webhook 或其频道可能已被删除。原因：{why}",
@@ -1242,7 +1290,7 @@ const zhCn: Dict = {
     "只有在发送开启期间捕获的内容才会被发送——暂停期间拍摄的内容会留在 Deck 上。离线时，恢复联网后会自动重试。无法压缩到 Telegram 机器人 50 MB 上限内的片段会被跳过（会有提示）。",
   delete_after: "发送后从 Deck 删除",
   delete_after_desc:
-    "在内容安全送达 Telegram 后释放空间。删除的项目也会从 Steam 图库中消失。",
+    "在内容安全送达 Telegram 后释放空间。删除的项目也会从 Steam 图库中消失。 在图库中手动挑选的内容不会被删除。",
   status: "状态",
   version: "版本",
   update_available: "有可用更新：{v}",
@@ -1292,6 +1340,12 @@ const zhCn: Dict = {
   send_test: "发送测试消息",
   failed_prefix: "失败：",
   rerun_setup: "设置向导",
+  tidy_media: "整理 Steam 媒体列表",
+  tidy_desc:
+    "清除 Steam 中仍指向已删除内容的条目（媒体标签页里那些破损的图块），以及传输中断后残留的临时文件。",
+  tidy_running: "正在整理...",
+  tidy_done: "已整理 {n} 项",
+  tidy_clean: "没有需要整理的内容",
   no_token: "无令牌",
 };
 
@@ -1331,7 +1385,7 @@ const zhTw: Dict = {
   only_new_note_dc:
     "只有在傳送開啟期間擷取的內容才會送出——暫停期間拍攝的內容會留在 Deck 上。離線時，恢復連線後會自動重試。影片片段受你的 Discord 伺服器上傳上限限制（免費伺服器為 10 MB），因此超過約 3 分鐘的片段會被略過並顯示提示。",
   delete_after_desc_dc:
-    "在內容安全送達 Discord 後釋出空間。移除的項目也會從 Steam 圖庫中消失。",
+    "在內容安全送達 Discord 後釋出空間。移除的項目也會從 Steam 圖庫中消失。 在圖庫中手動挑選的內容不會被刪除。",
   setup_broken_dc: "Discord 拒絕了這個 Webhook",
   setup_broken_desc_dc:
     "傳送已暫停——重試無法解決。該 Webhook 或其頻道可能已被刪除。原因：{why}",
@@ -1384,7 +1438,7 @@ const zhTw: Dict = {
     "只有在傳送開啟期間擷取的內容才會送出——暫停期間拍攝的內容會留在 Deck 上。離線時，恢復連線後會自動重試。無法壓縮到 Telegram 機器人 50 MB 上限內的片段會被略過（會顯示提示）。",
   delete_after: "傳送後從 Deck 刪除",
   delete_after_desc:
-    "在內容安全送達 Telegram 後釋出空間。移除的項目也會從 Steam 圖庫中消失。",
+    "在內容安全送達 Telegram 後釋出空間。移除的項目也會從 Steam 圖庫中消失。 在圖庫中手動挑選的內容不會被刪除。",
   status: "狀態",
   version: "版本",
   update_available: "有可用更新：{v}",
@@ -1434,6 +1488,12 @@ const zhTw: Dict = {
   send_test: "傳送測試訊息",
   failed_prefix: "失敗：",
   rerun_setup: "設定精靈",
+  tidy_media: "整理 Steam 媒體清單",
+  tidy_desc:
+    "清除 Steam 中仍指向已刪除內容的項目（媒體分頁裡那些破損的圖塊），以及傳送中斷後殘留的暫存檔。",
+  tidy_running: "正在整理...",
+  tidy_done: "已整理 {n} 項",
+  tidy_clean: "沒有需要整理的內容",
   no_token: "無權杖",
 };
 

@@ -22,7 +22,7 @@ import os
 import re
 
 from . import media, net
-from .errors import SendError, SetupBroken, Unsendable
+from .errors import SendError, SetupBroken, Uncertain, Unsendable
 
 # A webhook URL looks like
 #   https://discord.com/api/webhooks/<id>/<token>
@@ -74,7 +74,7 @@ def _check(status: int, payload):
     raise SendError(msg or "HTTP %d" % status, code=status, retry_after=retry_after)
 
 
-def _post(url: str, content: str, paths: list, timeout: int = 300):
+def _post(url: str, content: str, paths: list, timeout: int = None):
     files = {"files[%d]" % i: p for i, p in enumerate(paths[:MAX_FILES])}
     # payload_json carries everything that is not a file.  allowed_mentions
     # is pinned to nothing so a game title containing @everyone cannot ping
@@ -86,6 +86,11 @@ def _post(url: str, content: str, paths: list, timeout: int = 300):
                                    files=files, timeout=timeout)
     except net.Unreachable as e:
         raise SendError(str(e))
+    except net.Timeout as e:
+        # The files were already on the wire; Discord may have posted them.
+        raise Uncertain(str(e))
+    if status in (502, 503, 504):
+        raise Uncertain("HTTP %s" % status, code=status)
     _check(status, body)
 
 

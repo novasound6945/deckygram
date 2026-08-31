@@ -2,6 +2,83 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.4.1
+
+### Fixed / 수정
+
+- **Deleting after sending left broken tiles in Steam's Media tab.** The
+  file went, Steam's own record of it did not, and the grid drew a warning
+  triangle where the picture used to be - permanently, surviving restarts.
+  Reported by a user; it turned out to be four separate problems stacked
+  on each other, and all four are fixed:
+  **전송 후 자동삭제가 스팀 미디어 탭에 깨진 타일을 남기던 문제.** 파일은
+  지워지는데 스팀이 가진 기록은 남아, 사진이 있던 자리에 경고 삼각형이
+  떴습니다. 재시작해도 사라지지 않았습니다. 사용자 제보로 시작해 파보니
+  네 가지 원인이 겹쳐 있었고, 모두 수정했습니다.
+
+  | | |
+  |---|---|
+  | Steam is asked to delete, instead of being told afterwards | Its list only forgets an entry when it deleted the file itself; going behind its back left the entry pointing at nothing. 스팀은 자기가 지웠을 때만 목록에서 뺍니다 |
+  | Delete calls are serialised | Five at once came back three successes and two silent failures. 다섯 건을 동시에 던지면 두 건이 조용히 실패했습니다 |
+  | The screenshot list is refreshed after a delete | Clips live in a store the grid watches; screenshots come from a cache only the deleting code updates. 클립과 스크린샷의 구조가 달랐습니다 |
+  | Entries orphaned by earlier versions are swept on load | So a Deck that already collected broken tiles comes back clean. 이미 쌓인 것도 정리됩니다 |
+
+- **The same clip could be delivered several times.** Telegram accepts a
+  large upload and can still answer 504; that was read as failure and the
+  clip was sent again. One 43 MB clip arrived five times. A timeout or a
+  5xx *after* the upload is now treated as "outcome unknown": the media is
+  kept, nothing is resent, and the panel says to check the chat first. A
+  connection that never reached the server still retries as before.
+  **같은 클립이 여러 번 도착하던 문제.** 텔레그램은 큰 파일을 다 받고도
+  504를 돌려줄 수 있는데, 이를 실패로 보고 다시 보냈습니다(43MB 클립이
+  5번 도착). 이제 **업로드를 마친 뒤의** 타임아웃·5xx는 "결과 불명"으로
+  보고 재전송하지 않으며, 채팅을 먼저 확인하도록 안내합니다. 서버에 닿지도
+  못한 경우는 지금처럼 자동 재시도합니다.
+
+- **Abandoned compression temp files piled up.** Stopping the plugin
+  mid-encode orphaned the working file; 254 MB of them were found on one
+  Deck. They are cleared at startup and by the new tidy button.
+  **인코딩 중 중단되면 임시 파일이 쌓이던 문제** (한 기기에서 254MB 발견).
+  시작할 때와 정리 버튼으로 치웁니다.
+
+- **Upload timeouts scale with the payload.** A flat ten minutes was sized
+  for a 45 MB clip and applied to 200 KB screenshots too, so a slow moment
+  at the server left the panel on "Sending" for what looked like a freeze.
+  A screenshot now gives up after about a minute and moves on to its retry.
+  **업로드 타임아웃이 크기에 비례합니다.** 45MB 클립 기준의 10분 고정값이
+  200KB 스크린샷에도 걸려, 서버가 느려지면 멈춘 것처럼 보였습니다.
+
+### Added / 추가
+
+- **A tidy-up button** in the panel: clears entries Steam still lists for
+  media that is gone, refreshes its media list, and removes leftover temp
+  files. The automatic cleanup runs at the right moments; this is for when
+  you want it now.
+  패널에 **정리 버튼**을 추가했습니다. 스팀 목록에 남은 유령 항목을 지우고,
+  목록을 새로 읽게 하고, 남은 임시 파일을 치웁니다.
+
+### Changed / 변경
+
+- **Media picked in the gallery is never deleted**, even with delete-after-
+  sending on. The gallery is for reaching into what is already on the Deck;
+  having an old screenshot vanish because you shared it is a poor surprise.
+  The setting still applies to everything sent automatically.
+  **갤러리에서 직접 고른 미디어는 삭제하지 않습니다** (자동삭제가 켜져
+  있어도). 갤러리는 기기에 이미 있는 것을 꺼내 보는 곳인데, 공유했다고
+  옛 스크린샷이 사라지는 건 당황스러운 결과입니다. 자동 전송분에는 설정이
+  그대로 적용됩니다.
+- The gallery keeps up with what leaves the Deck: anything sent or deleted
+  while it is open is greyed out and drops out of your selection, so you
+  cannot queue the same shot twice or get stuck with a pick you cannot
+  clear.
+  갤러리가 기기 상태를 따라갑니다. 열어둔 사이에 전송·삭제된 항목은 회색
+  처리되고 선택에서도 빠져, 같은 것을 두 번 보내거나 해제할 수 없는 선택에
+  갇히는 일이 없습니다.
+- The "send test message" button is gone from the panel; the setup wizard
+  still sends one.
+  패널의 "테스트 메시지 보내기" 버튼을 제거했습니다(설정 마법사의 테스트는
+  유지).
+
 ## v0.4.0
 
 ### Added / 추가

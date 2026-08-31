@@ -72,11 +72,23 @@ class Watcher:
         return glob.glob(os.path.join(
             self.home, ".steam/steam/userdata/*/gamerecordings/clips"))
 
+    def clip_roots(self):
+        """Where Steam keeps clip folders - see deckygram.library."""
+        return self._clip_roots()
+
+    def remote_roots(self):
+        """The roots Steam's screenshot URLs are relative to.
+
+        Public because the frontend's library cleanup resolves Steam's
+        strUrl values against these - see deckygram.library.
+        """
+        return glob.glob(os.path.join(
+            self.home, ".steam/steam/userdata/*/760/remote"))
+
     def _watch_roots(self):
         # Parents are watched too so newly created game folders get added.
         roots = set(self._screenshot_dirs())
-        roots.update(glob.glob(os.path.join(
-            self.home, ".steam/steam/userdata/*/760/remote")))
+        roots.update(self.remote_roots())
         roots.update(self._clip_roots())
         return roots
 
@@ -284,6 +296,10 @@ class Watcher:
                     for d in self._all_clip_dirs():
                         self.sender.process_clip(d)
                     last_clip_scan = now
+            # Clips Steam was asked to delete but did not: remove them here
+            # so freeing space never depends on the UI being up.
+            self.sender.sweep_clip_deletes()
+            self.sender.sweep_media_deletes()
             self.status["stalled"] = self.qs.stalled()
 
             if now - last_rewatch > 60:

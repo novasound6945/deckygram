@@ -41,9 +41,21 @@ reaches the public repo:
 
 ## Conventions
 
-- **Batch pushes.** Commit locally as work lands, but push to GitHub in
-  meaningful batches, not after every small change (owner's preference —
-  also keeps CI runs and notification noise down).
+- **Push only when releasing.** Commit locally as work lands, but do not
+  push to GitHub until a release is actually going out — then push `main`
+  and the `v*` tag together. Development history stays on the machine;
+  what the public sees is releases (owner's rule, 2026-08-31). It also
+  keeps CI runs and notification noise down.
+
+- **One commit per release.** History was rewritten on 2026-08-31 to hold
+  exactly one commit per released version, each carrying that release's
+  tree. Keep it that way: work locally in as many commits as you like,
+  then squash them into the release commit before tagging, listing the
+  original subjects in the body so the reasoning survives.
+
+- **Only `main` exists on the remote.** A public repo cannot hide a
+  branch, so feature and backup branches live locally and are never
+  pushed.
 
 - Backend stays **stdlib-only** Python; frontend deps are kept minimal.
 - The zip layout must keep a single top-level `Deckygram/` folder.
@@ -62,7 +74,19 @@ reaches the public repo:
   `watcher.py` orchestration/discovery/loop · `sender.py` send pipeline ·
   `qstate.py` queue+stats state · `captions.py` caption/manifest parsing
   (pure) · `inotify.py` ctypes wrapper · `tg.py` Bot API+encoding ·
-  `appname.py` appid→name · `pairing.py` · `updates.py`.
+  `appname.py` appid→name · `pairing.py` · `updates.py` ·
+  `library.py` which of Steam's media entries have no file behind them.
+
+- **Deleting media: ask Steam, do not do it yourself.** Steam keeps its own
+  record of screenshots and clips and only forgets an entry when it deleted
+  the file itself; removing the file first leaves an entry pointing at
+  nothing, which the media grid draws as a broken tile. The backend asks
+  the frontend (the only side that can reach Steam) and sweeps up after a
+  grace period if Steam did not. Two things that are easy to get wrong and
+  cost a night each: **delete calls must not overlap** (five at once lost
+  two, silently), and **screenshots need their react-query cache
+  invalidated** afterwards or the grid keeps drawing the old list - clips
+  do not, because they live in a store the grid watches.
 - Unit tests live in `tests/` (stdlib `unittest`, no fs/network beyond
   tempdirs) and run in CI. When adding logic, put the pure part in a
   testable function and cover it — the batching rules, size math and

@@ -14,7 +14,7 @@ import json
 import os
 
 from . import media, net
-from .errors import SendError, SetupBroken, Unsendable
+from .errors import SendError, SetupBroken, Uncertain, Unsendable
 
 API = "https://api.telegram.org/bot%s/%s"
 
@@ -71,14 +71,24 @@ def classify(description: str, code):
 # ----------------------------------------------------------------- HTTP layer
 
 def api_call(token: str, method: str, fields: dict = None, files: dict = None,
-             timeout: int = 600) -> dict:
+             timeout: int = None) -> dict:
+    """`timeout` defaults to one net.py sizes from the upload itself."""
+    uploading = bool(files)
     try:
         status, payload = net.request(API % (token, method), fields=fields,
                                       files=files, timeout=timeout)
     except net.Unreachable as e:
-        # Connection-level failure: no Telegram verdict, so always retryable.
+        # The request never left: no Telegram verdict, always retryable.
         raise TelegramError(str(e))
+    except net.Timeout as e:
+        # It did leave. If it carried a file, Telegram may have taken it
+        # even though we never heard back, so resending would duplicate.
+        raise (Uncertain if uploading else TelegramError)(str(e))
     if payload is None:
+        if uploading and status in (502, 503, 504):
+            # Same reasoning: a gateway giving up on us says nothing about
+            # what the upload backend did with the file.
+            raise Uncertain("HTTP %s" % status, code=status)
         raise classify("", status)("HTTP %s" % status, code=status)
     if not payload.get("ok"):
         desc = payload.get("description", "unknown error")

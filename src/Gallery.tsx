@@ -5,7 +5,9 @@ import {
   Spinner,
   GamepadButton,
 } from "@decky/ui";
-import { callable, toaster } from "@decky/api";
+import {
+  addEventListener, callable, removeEventListener, toaster,
+} from "@decky/api";
 import { useEffect, useRef, useState } from "react";
 import { t } from "./i18n";
 
@@ -218,6 +220,43 @@ export function GalleryPage() {
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<Page | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // Sent from here this session: the backend's "sent" flag lags behind.
+  const [justQueued, setJustQueued] = useState<Set<string>>(new Set());
+  // Deleted while this list was open. The page is a snapshot taken when
+  // you walked in, so without this the watcher can send and delete a shot
+  // behind your back and its tile still invites you to send it again.
+  const [gone, setGone] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    // The backend names what it deleted by its tail ("<appid>/screenshots/
+    // <name>.jpg") or a clip's folder name; item ids here are full paths.
+    const l = addEventListener<[kind: string, what: string, body: string]>(
+      "deckygram_event",
+      (kind, what) => {
+        if (kind !== "media_delete" && kind !== "clip_delete") return;
+        setGone((prev) => new Set(prev).add(what));
+        // Drop it from the selection too. Marking it unpickable while it
+        // stays selected strands it: the tile refuses to toggle, so the
+        // count never comes down and it rides along on the next send.
+        setPicked((prev) => {
+          if (![...prev].some((id) => id.endsWith(what))) return prev;
+          const next = new Set(prev);
+          for (const id of prev) {
+            if (id.endsWith(what)) next.delete(id);
+          }
+          return next;
+        });
+      },
+    );
+    return () => removeEventListener("deckygram_event", l);
+  }, []);
+
+  const isGone = (id: string) => {
+    for (const tail of gone) {
+      if (tail && id.endsWith(tail)) return true;
+    }
+    return false;
+  };
   const [busy, setBusy] = useState(false);
   const gridRef = useRef<HTMLDivElement | null>(null);
 
@@ -263,6 +302,8 @@ export function GalleryPage() {
   }, [kind]);
 
   const toggle = (id: string) => setPicked((prev) => {
+    // Already on its way, or gone from the Deck while you were looking.
+    if (justQueued.has(id) || isGone(id)) return prev;
     const next = new Set(prev);
     if (next.has(id)) {
       next.delete(id);
@@ -275,9 +316,20 @@ export function GalleryPage() {
 
   const send = async () => {
     setBusy(true);
-    const r = await gallerySend([...picked]).catch(() => ({ count: 0 }));
+    const queued = [...picked];
+    const r = await gallerySend(queued).catch(() => ({ count: 0 }));
     setBusy(false);
     setPicked(new Set());
+    // Mark them here and now. The backend has only queued them, so the
+    // index still lists them as unsent for a while, and without this you
+    // can pick the same shot again and queue it twice. Marking beats
+    // removing: the tiles keep their places, so paging and focus do not
+    // shuffle under you mid-selection.
+    setJustQueued((prev) => {
+      const next = new Set(prev);
+      for (const id of queued) next.add(id);
+      return next;
+    });
     toaster.toast({ title: "Deckygram", body: t("gallery_queued", { n: r.count }) });
   };
 
@@ -295,7 +347,9 @@ export function GalleryPage() {
   // the batch - "30 picked" reads very differently at 2 clips vs 28.
   const pickedClips = (page?.items ?? [])
     .filter((i) => picked.has(i.id) && i.kind === "clip").length;
-  const sendableOnPage = (page?.items ?? []).filter((i) => i.sendable);
+  // Already on their way, so not candidates for "select page" either.
+  const sendableOnPage = (page?.items ?? [])
+    .filter((i) => i.sendable && !justQueued.has(i.id) && !isGone(i.id));
   const onThisPage = sendableOnPage.filter((i) => picked.has(i.id)).length;
   const elsewhere = picked.size - onThisPage;
   // "all picked" also holds when the cap stopped us short of the page.
@@ -305,7 +359,8 @@ export function GalleryPage() {
   const togglePage = () => setPicked((prev) => {
     const next = new Set(prev);
     for (const it of page?.items ?? []) {
-      if (!it.sendable) continue;   // cannot be sent, so never auto-picked
+      // Cannot be sent, or already queued from here: never auto-picked.
+      if (!it.sendable || justQueued.has(it.id) || isGone(it.id)) continue;
       if (pageAllPicked) {
         next.delete(it.id);
       } else if (next.size < MAX_PICKS) {
@@ -467,7 +522,13 @@ export function GalleryPage() {
           }}
         >
           {page.items.map((it) => (
-            <Tile key={it.id} item={it} thumb={thumbs[it.id]}
+            <Tile key={it.id}
+              item={{
+                ...it,
+                sent: it.sent || justQueued.has(it.id) || isGone(it.id),
+                sendable: it.sendable && !isGone(it.id),
+              }}
+              thumb={thumbs[it.id]}
               picked={picked.has(it.id)} onToggle={() => toggle(it.id)} />
           ))}
         </Focusable>

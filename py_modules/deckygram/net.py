@@ -8,6 +8,7 @@ live here instead of being duplicated per backend.
 import json
 import mimetypes
 import os
+import socket
 import ssl
 import urllib.error
 import urllib.request
@@ -46,7 +47,16 @@ USER_AGENT = ("Deckygram (https://github.com/novasound6945/deckygram, 1.0)")
 
 
 class Unreachable(Exception):
-    """Connection-level failure - no verdict from the server."""
+    """Connection-level failure - the request never got out."""
+
+
+class Timeout(Exception):
+    """The request went out and nothing came back in time.
+
+    Kept apart from Unreachable because the difference decides whether a
+    retry is safe: if the body was an upload, the server may already have
+    it. See errors.Uncertain.
+    """
 
 
 def multipart(fields: dict, files: dict):
@@ -68,9 +78,31 @@ def multipart(fields: dict, files: dict):
     return bytes(body), "multipart/form-data; boundary=%s" % boundary
 
 
+# How long a transfer may go silent before we give up. This is an
+# inactivity timeout, not a deadline, so it only has to cover the longest
+# pause a healthy upload might take. It used to be a flat 600s, sized for
+# a 45 MB clip and applied to 200 KB screenshots as well; a user watching
+# the panel sit on "Sending" for ten minutes reasonably reads that as
+# frozen (reported 2026-09-01), so it now follows the payload.
+MIN_TIMEOUT = 45
+MAX_TIMEOUT = 600
+SLOW_BYTES_PER_SEC = 100_000     # a deliberately pessimistic floor
+
+
+def timeout_for(nbytes) -> int:
+    """Seconds of silence to tolerate while sending `nbytes`."""
+    try:
+        n = max(0, int(nbytes))
+    except (TypeError, ValueError):
+        n = 0
+    return int(min(MAX_TIMEOUT, MIN_TIMEOUT + n / SLOW_BYTES_PER_SEC))
+
+
 def request(url: str, fields: dict = None, files: dict = None,
-            json_body: dict = None, timeout: int = 600):
+            json_body: dict = None, timeout: int = None):
     """POST (or GET) and return (status, parsed_json_or_None).
+
+    `timeout` defaults to one derived from how much is being uploaded.
 
     A response body that is not JSON comes back as None; callers that
     care about the text should not be using this helper.  Raises
@@ -90,6 +122,9 @@ def request(url: str, fields: dict = None, files: dict = None,
     else:
         req = urllib.request.Request(url, headers=head)
 
+    if timeout is None:
+        timeout = timeout_for(len(req.data or b""))
+
     try:
         with urllib.request.urlopen(req, timeout=timeout, context=SSL_CTX) as resp:
             status = resp.getcode()
@@ -102,5 +137,12 @@ def request(url: str, fields: dict = None, files: dict = None,
             return e.code, json.load(e)
         except Exception:
             return e.code, None
+    except (socket.timeout, TimeoutError) as e:
+        raise Timeout(str(e) or "timed out")
+    except urllib.error.URLError as e:
+        # URLError wraps whatever went wrong underneath, timeouts included.
+        if isinstance(e.reason, (socket.timeout, TimeoutError)):
+            raise Timeout("timed out")
+        raise Unreachable(str(e))
     except Exception as e:
         raise Unreachable(str(e))

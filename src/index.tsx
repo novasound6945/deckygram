@@ -8,6 +8,7 @@ import {
   ToggleField,
   Field,
   staticClasses,
+  findModuleExport,
 } from "@decky/ui";
 import {
   addEventListener,
@@ -170,6 +171,249 @@ const getPairing = callable<[], Pairing>("get_pairing");
 const stopPairing = callable<[], { ok: boolean }>("stop_pairing");
 const retryQueue = callable<[], { count: number }>("retry_queue");
 const skipQueue = callable<[], { count: number }>("skip_queue");
+const findLibraryOrphans =
+  callable<[urls: string[]], { orphans: string[] }>("find_library_orphans");
+const findMissingClips =
+  callable<[ids: string[]], { missing: string[] }>("find_missing_clips");
+const cleanupTemps =
+  callable<[], { count: number; bytes: number }>("cleanup_temps");
+const uiLog = callable<[msg: string], { ok: boolean }>("ui_log");
+
+// ---- Steam library cleanup -------------------------------------------------
+
+/** One row of Steam's own screenshot index. */
+interface SteamShot {
+  strGameID: string;
+  hHandle: number;
+  strUrl: string;
+}
+
+/**
+ * Steam's clip store, if we can still find it.
+ *
+ * Clips are not in any SteamClient API. Steam's own Media tab deletes one
+ * by calling DeleteClip on this store, which drops the entry, tells the
+ * client over GameRecording.DeleteClip, and refreshes the grid - which is
+ * why deleting from inside Steam makes the tile vanish at once. Removing
+ * the folder ourselves does none of that, so the tile stays until Steam
+ * restarts.
+ *
+ * This reaches into minified internals, so it is written to fail quietly:
+ * if a Steam update moves it, clip deletion still works, the tile just
+ * lingers as it did before.
+ */
+function getClipStore(): any {
+  // Steam parks the game-recording store on the window as g_GRS; that is
+  // how its own code reaches it. Deliberately not cached: the store is
+  // replaced when Steam's UI reloads, and a stale reference would silently
+  // stop working.
+  const g = (window as any).g_GRS;
+  if (g && typeof g.DeleteClip === "function") return g;
+  try {
+    return findModuleExport(
+      (e: any) => e && typeof e.DeleteClip === "function" && e.m_clips,
+    ) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Let Steam delete a clip, so its own list updates.
+ *
+ * Steam removes an entry from g_GRS only when the client reports the
+ * files were deleted. If the backend removed the folder first, this call
+ * answers FileNotFound and the tile stays until Steam restarts - so the
+ * backend now waits a few seconds for this instead, and cleans up itself
+ * only if Steam did not.
+ */
+/**
+ * Steam's delete calls must not overlap.
+ *
+ * A burst of screenshots produces a burst of delete events, and firing
+ * them together loses some: five sent at once came back three succeeded,
+ * two `bSuccess:false` (measured 2026-09-01). The same thing bit the
+ * index sweep earlier. So everything that talks to Steam about deleting
+ * goes through this one chain, one at a time.
+ */
+let deleteChain: Promise<unknown> = Promise.resolve();
+function serialised<T>(fn: () => Promise<T>): Promise<T | undefined> {
+  const next = deleteChain.then(fn, fn).catch(() => undefined);
+  deleteChain = next;
+  return next as Promise<T | undefined>;
+}
+
+/**
+ * Steam's media grid reads screenshots through react-query.
+ *
+ * Clips live in the g_GRS store, so removing one there updates the grid
+ * at once. Screenshots do not: DeleteLocalScreenshots removes the file
+ * and the index, but the grid keeps drawing from its cached query until
+ * whoever deleted it edits that cache - which is what Steam's own delete
+ * menu does. Nothing else refreshes it, which is why a deleted shot left
+ * a warning tile while a deleted clip vanished cleanly.
+ *
+ * The client is not exported anywhere, but it sits on a context a few
+ * levels up from any rendered element, and the same one serves this
+ * context. Invalidating the "screenshots" queries makes the grid refetch.
+ */
+function findQueryClient(): any {
+  const els = document.querySelectorAll("*");
+  const limit = Math.min(els.length, 40);
+  for (let i = 0; i < limit; i++) {
+    const el = els[i] as any;
+    const key = Object.keys(el).find(
+      (k) => k.startsWith("__reactFiber$") || k.startsWith("__reactContainer$"),
+    );
+    if (!key) continue;
+    let f = el[key];
+    for (let d = 0; f && d < 400; d++) {
+      const v = f.memoizedProps?.value;
+      if (v && typeof v === "object" && typeof v.getQueryCache === "function") {
+        return v;
+      }
+      f = f.return;
+    }
+  }
+  return null;
+}
+
+/** Make Steam's media grid re-read its screenshot list. */
+function refreshSteamScreenshotList(): void {
+  // Not cached: Steam replaces the client when its UI reloads, and a dead
+  // reference would fail silently - the exact failure this fixes.
+  const qc = findQueryClient();
+  if (!qc) return;
+  try {
+    qc.invalidateQueries({ queryKey: ["screenshots"] });
+  } catch {
+    try {
+      qc.invalidateQueries(["screenshots"]);   // older react-query shape
+    } catch {
+      /* the list still corrects itself next time Steam builds it */
+    }
+  }
+}
+
+/**
+ * Let Steam delete a screenshot, so its own list updates.
+ *
+ * Steam's Media tab uses the plural DeleteLocalScreenshots, grouped by
+ * game id - deleting the file behind its back is what leaves the warning
+ * tiles. `tail` is "<appid>/screenshots/<name>.jpg", enough to find the
+ * entry in Steam's list.
+ */
+async function deleteScreenshotViaSteam(tail: string): Promise<boolean> {
+  const api = (window as any)?.SteamClient?.Screenshots;
+  if (!api?.GetAllLocalScreenshots || !api?.DeleteLocalScreenshots) {
+    uiLog("shot delete: no Screenshots API").catch(() => {});
+    return false;
+  }
+  try {
+    const all: SteamShot[] = await api.GetAllLocalScreenshots();
+    const hit = all?.find((s) => s.strUrl?.endsWith(tail));
+    if (!hit) {
+      uiLog(`shot delete: ${tail} not in Steam's list of ${all?.length ?? 0}`)
+        .catch(() => {});
+      return false;
+    }
+    const r = await api.DeleteLocalScreenshots(
+      [{ gameID: hit.strGameID, rgHandles: [hit.hHandle] }],
+    );
+    uiLog(`shot delete ${tail}: ${JSON.stringify(r)}`).catch(() => {});
+    if (r?.bSuccess) refreshSteamScreenshotList();
+    return !!r?.bSuccess;
+  } catch (e) {
+    uiLog(`shot delete ${tail} threw: ${e}`).catch(() => {});
+    return false;   // the backend's fallback removes the file shortly
+  }
+}
+
+async function deleteClipViaSteam(clipId: string): Promise<void> {
+  const store = getClipStore();
+  if (!store) return;
+  try {
+    await store.DeleteClip(clipId);
+  } catch {
+    /* the backend's fallback removes the folder shortly */
+  }
+}
+
+/**
+ * Drop clips Steam still lists whose folder is gone.
+ *
+ * Unlike screenshots, clips have no index on disk: Steam builds g_GRS from
+ * the clips folder when the media view opens and drops it when you leave,
+ * so a stale entry cannot outlive that view. Nothing to clean up on load,
+ * then - this only matters while the store is live, which is exactly when
+ * a stale entry would be on screen.
+ */
+async function pruneBrokenClips(): Promise<number> {
+  const store = getClipStore();
+  const clips = store?.m_clips;
+  const ids: string[] = clips?.keys ? Array.from(clips.keys()) : [];
+  if (!ids.length) return 0;      // media view closed; nothing is listed
+
+  const { missing } = await findMissingClips(ids);
+  if (!missing?.length) return 0;
+
+  let n = 0;
+  for (const id of missing) {
+    try {
+      // Serialised, for the same reason the screenshot sweep is.
+      await store.DeleteClip(id);
+      n++;
+    } catch {
+      /* keep going; one bad id should not stop the sweep */
+    }
+  }
+  return n;
+}
+
+/**
+ * Drop index entries whose picture is gone.
+ *
+ * Deleting the file is not enough: Steam keeps its own list, and the media
+ * grid draws a tile with a warning triangle wherever an entry has no file
+ * behind it. Deleting a screenshot after sending left exactly that (user
+ * report, 2026-08-31). Only the client can mend the list, and only from
+ * here - the backend has no access to SteamClient.
+ *
+ * Runs on every plugin load, so a Deck that already collected broken tiles
+ * is cleaned up on the next start rather than needing anything from the
+ * user. Steam caches this list for the lifetime of its UI, though, so the
+ * tiles themselves only disappear once the UI reloads.
+ *
+ * Clips need no equivalent: Steam enumerates the clips folder rather than
+ * indexing it, so removing a clip folder leaves nothing behind.
+ */
+async function pruneBrokenLibraryEntries(): Promise<number> {
+  const api = (window as any)?.SteamClient?.Screenshots;
+  if (!api?.GetAllLocalScreenshots || !api?.DeleteLocalScreenshot) return 0;
+
+  const all: SteamShot[] = await api.GetAllLocalScreenshots();
+  if (!all?.length) return 0;
+
+  const { orphans } = await findLibraryOrphans(all.map((s) => s.strUrl));
+  if (!orphans?.length) return 0;
+
+  const dead = new Set(orphans);
+  let n = 0;
+  for (const s of all) {
+    if (!dead.has(s.strUrl)) continue;
+    try {
+      // One at a time. Firing these together drops all but one on the
+      // floor - measured on hardware: three orphans, three calls issued
+      // in a plain loop, one entry actually removed.
+      await api.DeleteLocalScreenshot(s.strGameID, s.hHandle);
+      n++;
+    } catch {
+      /* one stubborn entry should not stop the rest */
+    }
+  }
+  if (n) refreshSteamScreenshotList();
+  return n;
+}
 
 // ---- setup wizard ----------------------------------------------------------
 
@@ -434,6 +678,7 @@ function Content() {
   const [forgetArmed, setForgetArmed] = useState<Destination | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [updateMsg, setUpdateMsg] = useState("");
+  const [tidying, setTidying] = useState(false);
 
   const refresh = async () => {
     const [s, st] = await Promise.all([getSettings(), getStatus()]);
@@ -646,15 +891,35 @@ function Content() {
             <Field label={t("last_error")} description={status.last_error} />
           </PanelSectionRow>
         ) : null}
+        {/* Steam only rebuilds its media list at certain moments, so the
+            automatic sweeps can be a beat behind what you are looking at.
+            This runs the same cleanup on demand, which is the reliable
+            way to get a tidy Media tab right now. */}
         <PanelSectionRow>
-          <ButtonItem layout="below" onClick={async () => {
-            const r = await sendTest();
-            toaster.toast({
-              title: "Deckygram",
-              body: r.ok ? t("test_sent") : (t("failed_prefix") + (r.error ?? "")),
-            });
-          }}>
-            {t("send_test")}
+          <ButtonItem
+            layout="below"
+            description={t("tidy_desc")}
+            disabled={tidying}
+            onClick={async () => {
+              setTidying(true);
+              try {
+                const shots = (await serialised(pruneBrokenLibraryEntries)) ?? 0;
+                const clips = (await serialised(pruneBrokenClips)) ?? 0;
+                const temps = await cleanupTemps().catch(() => ({ count: 0, bytes: 0 }));
+                // Always, not just when something was pruned: the usual
+                // reason to press this is a list that went stale, which
+                // needs no orphan to exist.
+                refreshSteamScreenshotList();
+                const n = shots + clips + temps.count;
+                toaster.toast({
+                  title: "Deckygram",
+                  body: n ? t("tidy_done", { n }) : t("tidy_clean"),
+                });
+              } finally {
+                setTidying(false);
+              }
+            }}>
+            {tidying ? t("tidy_running") : t("tidy_media")}
           </ButtonItem>
         </PanelSectionRow>
         {/* Both credentials are kept side by side, so switching is one
@@ -710,10 +975,37 @@ function Content() {
 }
 
 export default definePlugin(() => {
+  // Clear any broken tiles left behind before this version, or by a
+  // previous session. Failure here must never keep the plugin from
+  // loading, so it is fire-and-forget.
+  serialised(pruneBrokenLibraryEntries);
+
+  // A send may have been followed by a delete. Sweep once things settle,
+  // rather than after each item in a burst.
+  let sweep: ReturnType<typeof setTimeout> | undefined;
+  const sweepSoon = () => {
+    if (sweep) clearTimeout(sweep);
+    sweep = setTimeout(() => {
+      serialised(pruneBrokenLibraryEntries);
+      serialised(pruneBrokenClips);
+    }, 30_000);
+  };
+
   const listener = addEventListener<[kind: string, title: string, body: string]>(
     "deckygram_event",
-    (_kind, title, body) => {
+    (kind, title, body) => {
+      // Not a message for the user: the backend is handing us the id of a
+      // clip it just removed so Steam can be told to drop it too.
+      if (kind === "clip_delete") {
+        serialised(() => deleteClipViaSteam(title));
+        return;
+      }
+      if (kind === "media_delete") {
+        serialised(() => deleteScreenshotViaSteam(title));
+        return;
+      }
       toaster.toast({ title, body });
+      if (kind === "sent") sweepSoon();
     },
   );
 
@@ -727,6 +1019,7 @@ export default definePlugin(() => {
     content: <Content />,
     icon: <FaTelegramPlane />,
     onDismount() {
+      if (sweep) clearTimeout(sweep);
       removeEventListener("deckygram_event", listener);
       routerHook.removeRoute(GALLERY_ROUTE);
     },

@@ -27,6 +27,36 @@ from .errors import Unsendable
 TMP_DIR = None
 VAAPI_DEV = "/dev/dri/renderD128"
 
+def clear_stale_temps(tmp_dir):
+    """Delete leftover compression temp files. Returns (count, bytes).
+
+    A clip is compressed into a NamedTemporaryFile that the sender unlinks
+    when it is done. If the plugin is stopped mid-encode - a reload, a
+    crash, the Deck powering off - that file is orphaned, and clips are
+    large enough that a few of these are real disk (one 45 MB leftover was
+    found this way, 2026-09-01).
+
+    Only safe to call at startup: nothing of ours is encoding yet, so any
+    temp file present is by definition abandoned.
+    """
+    n = size = 0
+    if not tmp_dir:
+        return (0, 0)
+    for name in os.listdir(tmp_dir):
+        if not name.startswith("tmp") or not name.endswith(".mp4"):
+            continue
+        path = os.path.join(tmp_dir, name)
+        try:
+            if not os.path.isfile(path):
+                continue
+            size += os.path.getsize(path)
+            os.unlink(path)
+            n += 1
+        except OSError:
+            pass
+    return (n, size)
+
+
 IMAGE_EXT = {".jpg", ".jpeg", ".png"}
 VIDEO_EXT = {".mp4", ".mkv", ".webm", ".mov"}
 

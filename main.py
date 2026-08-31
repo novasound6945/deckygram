@@ -11,6 +11,7 @@ import os
 import decky
 from deckygram import destinations, discord, media, tg
 from deckygram.appname import AppNameResolver
+from deckygram import library
 from deckygram.gallery import Gallery
 from deckygram.pairing import PairingServer
 from deckygram.updates import UpdateChecker
@@ -323,6 +324,55 @@ class Plugin:
     async def skip_queue(self) -> dict:
         return {"count": self.watcher.skip_queued()}
 
+    async def find_library_orphans(self, urls: list) -> dict:
+        """Which of Steam's screenshot entries have no file behind them.
+
+        Deleting a screenshot after sending leaves Steam's index pointing
+        at nothing, and the media grid draws a warning tile there. Mending
+        the index needs a frontend-only API, so the frontend passes Steam's
+        own list in here and we answer which entries are dead.
+        """
+        try:
+            return {"orphans": library.find_orphans(
+                urls or [], self.watcher.remote_roots())}
+        except Exception as e:
+            decky.logger.info("orphan scan failed: %r" % (e,))
+            return {"orphans": []}
+
+    async def ui_log(self, msg: str) -> dict:
+        """Let the frontend write to the plugin log.
+
+        The media-library half of this plugin runs in the UI, where a
+        silent failure leaves no trace at all - which cost an evening of
+        guessing once. Anything it reports lands beside the backend's own
+        lines, in the file users attach to bug reports.
+        """
+        decky.logger.info("ui: %s" % (msg,))
+        return {"ok": True}
+
+    async def cleanup_temps(self) -> dict:
+        """Delete compression temp files left behind by an interrupted send."""
+        n, freed = media.clear_stale_temps(decky.DECKY_PLUGIN_RUNTIME_DIR)
+        if n:
+            decky.logger.info("tidy: cleared %d temp file(s), %.1f MB"
+                              % (n, freed / 1e6))
+        return {"count": n, "bytes": freed}
+
+    async def find_missing_clips(self, clip_ids: list) -> dict:
+        """Which of Steam's listed clips no longer have a folder.
+
+        Same job as find_library_orphans, for the clips half of the media
+        grid. Steam has no index for these - it lists whatever is in the
+        clips directory when its UI starts - so anything deleted since
+        then is stale and draws a broken tile.
+        """
+        try:
+            return {"missing": library.find_missing_clips(
+                clip_ids or [], self.watcher.clip_roots())}
+        except Exception as e:
+            decky.logger.info("clip scan failed: %r" % (e,))
+            return {"missing": []}
+
     async def get_status(self) -> dict:
         self.updates.poke()
         st = dict(self.watcher.status)
@@ -355,6 +405,10 @@ class Plugin:
         state_dir = decky.DECKY_PLUGIN_RUNTIME_DIR
         os.makedirs(state_dir, exist_ok=True)
         media.TMP_DIR = state_dir  # keep ffmpeg temp files off the RAM-backed /tmp
+        stale, freed = media.clear_stale_temps(state_dir)
+        if stale:
+            decky.logger.info("cleared %d abandoned temp file(s), %.1f MB"
+                              % (stale, freed / 1e6))
         resolver = AppNameResolver(home, os.path.join(state_dir, "appnames.json"))
         self.watcher = Watcher(
             home=home,

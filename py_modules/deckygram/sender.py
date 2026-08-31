@@ -16,13 +16,14 @@ import tempfile
 import time
 
 from . import captions, destinations, media
-from .errors import SetupBroken, Unsendable
+from .errors import SetupBroken, Uncertain, Unsendable
 
 SETTLE_SEC = 3          # wait after last write before sending
 CLIP_SETTLE_SEC = 30    # clips: recording may still be in progress
 RETRY_SEC = 30          # backoff before retrying a failed send
 MAX_ATTEMPTS = 5        # give up (but keep the item) after this many tries
 RECHECK_SEC = 600       # re-test a broken setup this often
+CLIP_DELETE_GRACE = 8   # how long Steam gets to delete a clip itself
 
 
 class Sender:
@@ -45,6 +46,10 @@ class Sender:
         # Telegram - which changes no setting here - recovers on its own.
         self._broken_at = 0.0
         self._paused_until = 0.0    # honours a 429's retry_after
+        # item -> deadline for the fallback removal.  Steam is asked first;
+        # see _delete_clip / _delete_media.
+        self._clip_deletes = {}
+        self._media_deletes = {}
 
     @staticmethod
     def _friendly(e):
@@ -96,29 +101,87 @@ class Sender:
 
     # ---------------------------------------------------------------- deleting
 
-    def _delete_media(self, path):
-        """Remove a sent screenshot/video from the Deck to free space.
+    @staticmethod
+    def _steam_tail(path):
+        """The tail of a screenshot path as Steam spells it in strUrl.
 
-        Screenshots keep a thumbnail next to them
-        (.../screenshots/thumbnails/<same name>) - remove that too so the
-        Steam media gallery does not show a broken entry.
+        "<appid>/screenshots/<name>.jpg" - enough for the frontend to find
+        the matching entry in Steam's own list.
         """
-        try:
-            os.unlink(path)
-            thumb = os.path.join(os.path.dirname(path), "thumbnails",
-                                 os.path.basename(path))
-            if os.path.isfile(thumb):
-                os.unlink(thumb)
-            self.log("deleted after send: %s" % os.path.basename(path))
-        except OSError as e:
-            self.log("delete failed: %s - %s" % (os.path.basename(path), e))
+        parts = path.replace("\\", "/").split("/")
+        return "/".join(parts[-3:]) if len(parts) >= 3 else os.path.basename(path)
+
+    def _delete_media(self, path):
+        """Have Steam delete a sent screenshot; fall back to doing it here.
+
+        Same reasoning as _delete_clip: Steam owns a list of screenshots
+        and only drops an entry when it deleted the file itself. Doing it
+        behind its back leaves an entry pointing at nothing, which the
+        media grid draws as a tile with a warning triangle.
+
+        So the frontend gets first refusal, and sweep_media_deletes cleans
+        up whatever Steam did not take - a video that was never in its
+        list, or any moment there is no UI listening.
+        """
+        self._media_deletes[path] = time.time() + CLIP_DELETE_GRACE
+        self.notify("media_delete", self._steam_tail(path), "")
+
+    def sweep_media_deletes(self):
+        """Remove screenshots Steam did not delete in time."""
+        now = time.time()
+        for path, deadline in list(self._media_deletes.items()):
+            if now < deadline:
+                continue
+            del self._media_deletes[path]
+            name = os.path.basename(path)
+            if not os.path.exists(path):
+                self.log("deleted by Steam: %s" % name)
+                continue
+            try:
+                os.unlink(path)
+                thumb = os.path.join(os.path.dirname(path), "thumbnails", name)
+                if os.path.isfile(thumb):
+                    os.unlink(thumb)
+                self.log("deleted after send (fallback): %s" % name)
+            except OSError as e:
+                self.log("delete failed: %s - %s" % (name, e))
 
     def _delete_clip(self, clip_dir):
-        try:
-            shutil.rmtree(clip_dir)
-            self.log("clip deleted after send: %s" % os.path.basename(clip_dir))
-        except OSError as e:
-            self.log("clip delete failed: %s - %s" % (os.path.basename(clip_dir), e))
+        """Have Steam delete the clip, and only step in if it does not.
+
+        Order matters. Steam's clip store forgets an entry only when the
+        client reports the delete succeeded; remove the folder first and
+        that call answers FileNotFound, the entry survives, and the media
+        grid draws a broken tile until Steam restarts (measured
+        2026-09-01: EResult 9, entry still listed).
+
+        So ask the frontend - the only side that can reach Steam's store -
+        and give it a moment. If the folder is still there afterwards
+        (media view closed, Steam changed shape, no frontend at all),
+        sweep_clip_deletes removes it so "delete after sending" still
+        frees the space.
+        """
+        self._clip_deletes[clip_dir] = time.time() + CLIP_DELETE_GRACE
+        self.notify("clip_delete", os.path.basename(clip_dir), "")
+
+    def sweep_clip_deletes(self):
+        """Remove clip folders Steam did not get to in time."""
+        now = time.time()
+        for clip_dir, deadline in list(self._clip_deletes.items()):
+            if now < deadline:
+                continue
+            del self._clip_deletes[clip_dir]
+            if not os.path.exists(clip_dir):
+                self.log("clip deleted by Steam: %s"
+                         % os.path.basename(clip_dir))
+                continue
+            try:
+                shutil.rmtree(clip_dir)
+                self.log("clip deleted after send (fallback): %s"
+                         % os.path.basename(clip_dir))
+            except OSError as e:
+                self.log("clip delete failed: %s - %s"
+                         % (os.path.basename(clip_dir), e))
 
     # ----------------------------------------------------------------- sending
 
@@ -172,11 +235,23 @@ class Sender:
             self.log("sent: %s" % os.path.basename(path))
             if s.get("notify_on_send", True):
                 self.notify("sent", "Sent", caption)
-            if s.get("delete_after_send"):
+            # Hand-picked items are never deleted. "Delete after sending"
+            # is about keeping the automatic flow from filling the disk;
+            # reaching into the gallery to share an old screenshot is not
+            # a request to throw it away, and losing it would be a nasty
+            # surprise.
+            if s.get("delete_after_send") and not forced:
                 self._delete_media(path)
         except Unsendable as e:
             self.qs.mark_sent(path)
             self.log("skipped (%s): %s" % (e, os.path.basename(path)))
+        except Uncertain as e:
+            # Sent, but no verdict. Retrying is how duplicates happen.
+            self.qs.give_up(path)
+            self.status["last_error"] = self._friendly(e)
+            self.log("no reply after upload, not resending "
+                     "(check your chat, then Retry now): %s - %s"
+                     % (os.path.basename(path), e))
         except Exception as e:
             fatal = self._note_failure(e)
             tries = self.qs.note_attempt(path)
@@ -237,18 +312,35 @@ class Sender:
     def _send_album(self, appid, files, s):
         caption = captions.album_caption(appid, self.resolver, len(files))
         self.status["current"] = "Sending album: %s" % caption
+        # Read before sending: mark_sent() clears the hand-picked flag.
+        picked = {p for p in files if self.qs.is_forced(p)}
         try:
             self.destination().send_album(files, caption)
             for p in files:
                 self.qs.mark_sent(p)
                 self.qs.bump_sent()
-                if s.get("delete_after_send"):
+                if s.get("delete_after_send") and p not in picked:
                     self._delete_media(p)
             self.status["sent"] = self.qs.sent_count
             self.status["last_sent"] = caption
             self.log("album sent: %s" % caption)
             if s.get("notify_on_send", True):
                 self.notify("sent", "Sent", caption)
+        except Uncertain as e:
+            # The album may already be in the chat. Falling back to
+            # per-file sends here would post every picture a second time.
+            with self.qs.lock:
+                for p in files:
+                    self.qs.pending.pop(p, None)
+            for p in files:
+                self.qs.give_up(p)
+            self.status["last_error"] = self._friendly(e)
+            self.log("album: no reply after upload, not resending "
+                     "(check your chat, then Retry now): %s - %s" % (caption, e))
+            if s.get("notify_on_send", True):
+                self.notify("skipped", "May have been sent",
+                            "No reply from the server. Check the chat before "
+                            "retrying, so nothing is sent twice.")
         except Exception as e:
             # Fall back to per-file sends (with their own retry) next tick.
             fatal = self._note_failure(e)
@@ -362,14 +454,26 @@ class Sender:
             self.log("clip sent: %s" % clip_id)
             if s.get("notify_on_send", True):
                 self.notify("sent", "Clip sent", caption)
-            if s.get("delete_after_send"):
-                self._delete_clip(clip_dir)
+            if s.get("delete_after_send") and not forced:
+                self._delete_clip(clip_dir)   # gallery picks are kept
         except Unsendable as e:
             self._finish_clip(clip_dir, clip_id)
             self.log("clip skipped (%s): %s" % (e, clip_id))
             if s.get("notify_on_send", True):
                 self.notify("skipped", "Clip not sent",
                             "Too long to fit the upload limit")
+        except Uncertain as e:
+            # The upload may well have landed. Resending is how one clip
+            # arrived five times, so stop and let the user look first.
+            self.qs.give_up(clip_dir)
+            self.qs.clip_retry_at[clip_id] = time.time() + 10 ** 9
+            self.status["last_error"] = self._friendly(e)
+            self.log("clip: no reply after upload, not resending "
+                     "(check your chat, then Retry now): %s - %s" % (clip_id, e))
+            if s.get("notify_on_send", True):
+                self.notify("skipped", "Clip may have been sent",
+                            "No reply from the server. Check the chat before "
+                            "retrying, so it is not sent twice.")
         except Exception as e:
             fatal = self._note_failure(e)
             tries = self.qs.note_attempt(clip_dir)
