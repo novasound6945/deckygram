@@ -2,6 +2,20 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.3.1
+
+### Changed / 변경
+- **The update button now downloads the ZIP** to the Deck rather than
+  opening a web page. Decky can install from a local file but cannot
+  fetch one, and driving Game Mode's browser to a download was the
+  worst part of updating. It lands in `~/Downloads`, the button says so,
+  and it sits at the top of the panel where you cannot miss it — install
+  from Decky → Developer → Install plugin from ZIP file, then restart.
+  **업데이트 버튼이 웹페이지 대신 ZIP을 직접 내려받습니다**(`~/Downloads`).
+  Decky는 로컬 ZIP 설치는 되지만 다운로드는 못 하고, 게임 모드
+  브라우저로 받는 게 업데이트에서 가장 번거로운 부분이었습니다. 버튼은
+  패널 맨 위에 표시됩니다.
+
 ## v0.3.0
 
 ### Added / 추가

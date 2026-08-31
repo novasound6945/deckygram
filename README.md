@@ -137,8 +137,10 @@ nowhere near the limit.</sub>
   **Retry now** once the problem is fixed. If Telegram rejects the bot
   itself (token regenerated, bot deleted or blocked), sending is
   suspended and the panel offers **Set up again**.
-- The plugin checks GitHub for new releases and shows an update button —
-  ZIP installs don't update themselves.
+- The plugin checks GitHub for new releases. The update button
+  **downloads the ZIP onto the Deck** (into `~/Downloads`), so updating is
+  just Decky → Developer → Install plugin from ZIP file, then a restart —
+  no browsing to a download page in Game Mode.
 - UI follows your Steam language (English / 한국어 today — PRs welcome).
 
 ### 🔧 Troubleshooting
@@ -262,8 +264,10 @@ Nitro가 아니라 **서버** 기준). 그래서 클립을 더 세게 압축하�
   **[지금 재시도]**를 누르면 전송됩니다. 텔레그램이 봇 자체를 거부하면
   (토큰 재발급·봇 삭제·차단) 전송을 중단하고 **다시 설정하기** 버튼을
   표시합니다.
-- 새 릴리스가 나오면 패널에 업데이트 버튼이 표시됩니다 — ZIP 설치는
-  스스로 갱신되지 않으니까요.
+- 새 릴리스가 나오면 업데이트 버튼이 표시되고, 누르면 **ZIP을 덱에
+  내려받습니다**(`~/Downloads`). 그다음 Decky → 개발자 → ZIP 파일에서
+  플러그인 설치로 고르고 재시작하면 끝입니다 — 게임 모드 브라우저로
+  다운로드 페이지를 헤맬 필요가 없습니다.
 - UI는 스팀 언어를 따라갑니다 (현재 영어/한국어 — 번역 PR 환영).
 
 ### 🔧 문제 해결

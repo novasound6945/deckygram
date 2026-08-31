@@ -252,6 +252,9 @@ class Plugin:
         else:
             self.watcher.stop()
 
+    async def download_update(self) -> dict:
+        return self.updates.download()
+
     # -------------------------------------------------------------- gallery
 
     async def gallery_list(self, offset: int = 0, limit: int = 30,

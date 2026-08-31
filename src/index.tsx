@@ -162,6 +162,10 @@ const setDestination = callable<
 const forgetDestination = callable<
   [dest: Destination], { ok: boolean; error?: string }
 >("forget_destination");
+type DownloadResult = {
+  ok: boolean; path?: string; dir?: string; name?: string; error?: string;
+};
+const downloadUpdate = callable<[], DownloadResult>("download_update");
 const getPairing = callable<[], Pairing>("get_pairing");
 const stopPairing = callable<[], { ok: boolean }>("stop_pairing");
 const retryQueue = callable<[], { count: number }>("retry_queue");
@@ -428,6 +432,8 @@ function Content() {
   const [showWizard, setShowWizard] = useState(false);
   // Which destination's "forget" button is armed, if any.
   const [forgetArmed, setForgetArmed] = useState<Destination | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState("");
 
   const refresh = async () => {
     const [s, st] = await Promise.all([getSettings(), getStatus()]);
@@ -466,8 +472,32 @@ function Content() {
   return (
     <>
       <PanelSection>
-        {/* First thing in the panel: the one action you come here to take
-            on purpose. Everything below it is settings and status. */}
+        {/* Top of the panel, in order of how often you act on it: a new
+            version (rare but time-sensitive), then the picker (the reason
+            you opened this), then everything else. */}
+        {status?.update_available ? (
+          <PanelSectionRow>
+            <ButtonItem
+              layout="below"
+              disabled={downloading}
+              description={updateMsg || t("update_hint")}
+              onClick={async () => {
+                setDownloading(true);
+                setUpdateMsg(t("update_downloading"));
+                const r: DownloadResult = await downloadUpdate()
+                  .catch((e) => ({ ok: false, error: String(e) }));
+                setDownloading(false);
+                setUpdateMsg(r.ok
+                  ? t("update_saved", { name: r.name ?? "", dir: r.dir ?? "" })
+                  : t("update_failed") + (r.error ?? ""));
+              }}
+            >
+              {downloading
+                ? t("update_downloading")
+                : t("update_available", { v: status.latest })}
+            </ButtonItem>
+          </PanelSectionRow>
+        ) : null}
         <PanelSectionRow>
           <ButtonItem
             layout="below"
@@ -495,16 +525,6 @@ function Content() {
             </PanelSectionRow>
           </>
         ) : null}
-        {status?.update_available ? (
-          <PanelSectionRow>
-            <ButtonItem
-              layout="below"
-              onClick={() => { if (status.url) Navigation.NavigateToExternalWeb(status.url); }}
-            >
-              {t("update_available", { v: status.latest })} — {t("open_release")}
-            </ButtonItem>
-          </PanelSectionRow>
-        ) : null}
         <PanelSectionRow>
           <ToggleField
             label={t(onDiscord ? "send_to_discord" : "send_to_telegram")}
@@ -518,22 +538,6 @@ function Content() {
             <Field description={t("ffmpeg_missing")} />
           </PanelSectionRow>
         ) : null}
-        {/* Both credentials are stored side by side, so switching is one
-            press - no need to pair again. Only shown once the other side
-            has actually been set up. */}
-        {(onDiscord ? settings.has_telegram : settings.has_discord) && (
-          <PanelSectionRow>
-            <ButtonItem
-              layout="below"
-              onClick={async () => {
-                await setDestination(onDiscord ? "telegram" : "discord");
-                refresh();
-              }}
-            >
-              {t(onDiscord ? "switch_to_telegram" : "switch_to_discord")}
-            </ButtonItem>
-          </PanelSectionRow>
-        )}
         <PanelSectionRow>
           <Field description={t(onDiscord ? "only_new_note_dc" : "only_new_note")} />
         </PanelSectionRow>
@@ -653,6 +657,22 @@ function Content() {
             {t("send_test")}
           </ButtonItem>
         </PanelSectionRow>
+        {/* Both credentials are kept side by side, so switching is one
+            press. Down here with the other setup controls: you switch
+            rarely, if ever. Hidden until the other side actually exists. */}
+        {(onDiscord ? settings.has_telegram : settings.has_discord) && (
+          <PanelSectionRow>
+            <ButtonItem
+              layout="below"
+              onClick={async () => {
+                await setDestination(onDiscord ? "telegram" : "discord");
+                refresh();
+              }}
+            >
+              {t(onDiscord ? "switch_to_telegram" : "switch_to_discord")}
+            </ButtonItem>
+          </PanelSectionRow>
+        )}
         <PanelSectionRow>
           <ButtonItem layout="below" onClick={() => setShowWizard(true)}>
             {`${t("rerun_setup")} (${onDiscord
