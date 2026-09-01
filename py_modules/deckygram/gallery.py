@@ -40,6 +40,48 @@ class Gallery:
         self._lock = threading.Lock()
         self._index = {}         # kind -> (built_at, [items])
 
+    def invalidate(self):
+        """Force the next listing to rebuild from disk.
+
+        The index is normally reused for INDEX_TTL seconds while paging.
+        After a delete that is exactly wrong: the item is gone but the
+        next page turn would still list it, and offer it for sending.
+        """
+        with self._lock:
+            self._index = {}
+
+    def sweep_orphan_posters(self):
+        """Delete cached clip posters whose clip is gone. Returns (n, bytes).
+
+        A poster is generated once per clip and kept as
+        posters/<folder-name>.jpg. Nothing removed them, so every clip
+        ever sent-and-deleted left one behind for good - small each, but
+        they only ever accumulated. Safe at any time: a missing poster is
+        simply regenerated on demand.
+        """
+        n = size = 0
+        live = {os.path.basename(d) for d in self._clips()}
+        try:
+            names = os.listdir(self.poster_dir)
+        except OSError:
+            return (0, 0)
+        for name in names:
+            if not name.endswith(".jpg"):
+                continue
+            # The filename is the folder name with unsafe characters
+            # replaced, so compare the same way it was written.
+            stem = name[:-4]
+            if any(re.sub(r"[^A-Za-z0-9_.-]", "_", c) == stem for c in live):
+                continue
+            path = os.path.join(self.poster_dir, name)
+            try:
+                size += os.path.getsize(path)
+                os.unlink(path)
+                n += 1
+            except OSError:
+                pass
+        return (n, size)
+
     # ------------------------------------------------------------- listing
 
     def _screenshots(self):

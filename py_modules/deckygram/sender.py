@@ -50,6 +50,13 @@ class Sender:
         # see _delete_clip / _delete_media.
         self._clip_deletes = {}
         self._media_deletes = {}
+        # What is being uploaded right now.  A delete request must not pull
+        # a file out from under its own send - see deckygram.deletion.
+        self._in_flight = set()
+
+    def in_flight(self, item) -> bool:
+        """True while this file or clip folder is being sent."""
+        return item in self._in_flight
 
     @staticmethod
     def _friendly(e):
@@ -226,6 +233,7 @@ class Sender:
             return
         caption = captions.caption_for(path, self.resolver)
         self.status["current"] = "Sending: %s" % caption
+        self._in_flight.add(path)
         try:
             self._send_file(path, caption)
             self.qs.mark_sent(path)
@@ -235,12 +243,16 @@ class Sender:
             self.log("sent: %s" % os.path.basename(path))
             if s.get("notify_on_send", True):
                 self.notify("sent", "Sent", caption)
-            # Hand-picked items are never deleted. "Delete after sending"
-            # is about keeping the automatic flow from filling the disk;
-            # reaching into the gallery to share an old screenshot is not
-            # a request to throw it away, and losing it would be a nasty
-            # surprise.
-            if s.get("delete_after_send") and not forced:
+            # Two ways to end up deleted, and they are not the same thing.
+            # The setting is about keeping the automatic flow from filling
+            # the disk, so it skips hand-picked items - sharing an old
+            # screenshot from the gallery is not a request to throw it
+            # away. An explicit delete asked for while it was queued is
+            # exactly that request, and overrides both.
+            if self.qs.wants_delete(path):
+                self.qs.delete_done(path)
+                self._delete_media(path)
+            elif s.get("delete_after_send") and not forced:
                 self._delete_media(path)
         except Unsendable as e:
             self.qs.mark_sent(path)
@@ -270,6 +282,7 @@ class Sender:
                          % (tries, MAX_ATTEMPTS, RETRY_SEC,
                             os.path.basename(path), e))
         finally:
+            self._in_flight.discard(path)
             self.status["current"] = ""
             self.status["progress"] = -1
 
@@ -314,12 +327,16 @@ class Sender:
         self.status["current"] = "Sending album: %s" % caption
         # Read before sending: mark_sent() clears the hand-picked flag.
         picked = {p for p in files if self.qs.is_forced(p)}
+        self._in_flight.update(files)
         try:
             self.destination().send_album(files, caption)
             for p in files:
                 self.qs.mark_sent(p)
                 self.qs.bump_sent()
-                if s.get("delete_after_send") and p not in picked:
+                if self.qs.wants_delete(p):
+                    self.qs.delete_done(p)
+                    self._delete_media(p)
+                elif s.get("delete_after_send") and p not in picked:
                     self._delete_media(p)
             self.status["sent"] = self.qs.sent_count
             self.status["last_sent"] = caption
@@ -352,6 +369,7 @@ class Sender:
             self.log("album failed (%s)%s" %
                      (e, "" if fatal else " - will retry individually"))
         finally:
+            self._in_flight.difference_update(files)
             self.status["current"] = ""
 
     # ------------------------------------------------------------------- clips
@@ -436,6 +454,9 @@ class Sender:
                                           dir=self.state_dir)
         tmp.close()
         caption = captions.clip_caption(clip_id, self.resolver)
+        # From here the clip is being remuxed, encoded and uploaded; its
+        # folder must survive all of that.
+        self._in_flight.add(clip_dir)
         try:
             self.status["current"] = "Exporting clip: %s" % caption
             r = subprocess.run(
@@ -454,7 +475,10 @@ class Sender:
             self.log("clip sent: %s" % clip_id)
             if s.get("notify_on_send", True):
                 self.notify("sent", "Clip sent", caption)
-            if s.get("delete_after_send") and not forced:
+            if self.qs.wants_delete(clip_dir):
+                self.qs.delete_done(clip_dir)
+                self._delete_clip(clip_dir)
+            elif s.get("delete_after_send") and not forced:
                 self._delete_clip(clip_dir)   # gallery picks are kept
         except Unsendable as e:
             self._finish_clip(clip_dir, clip_id)
@@ -488,6 +512,7 @@ class Sender:
                 self.log("clip failed (attempt %d/%d, retry in %ds): %s - %s"
                          % (tries, MAX_ATTEMPTS, RETRY_SEC * 2, clip_id, e))
         finally:
+            self._in_flight.discard(clip_dir)
             self.status["current"] = ""
             self.status["progress"] = -1
             try:

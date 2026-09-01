@@ -2,6 +2,78 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.5.0
+
+### Added / 추가
+
+- **Delete media from the gallery.** Pick what you want gone and press
+  Delete: it is removed from the Deck and from Steam's media list in one
+  go. The gallery already had multi-select, per-game and per-kind filters,
+  which makes clearing out a year of screenshots a good deal less tedious
+  than doing it one tile at a time.
+  **갤러리에서 미디어 삭제.** 지울 것을 골라 삭제를 누르면 기기와 스팀
+  미디어 목록에서 함께 사라집니다. 갤러리에는 다중 선택과 게임·종류
+  필터가 이미 있어서, 한 장씩 지우는 것보다 훨씬 수월합니다.
+
+  Deleting is permanent, so it is a button you have to aim at - no gamepad
+  shortcut - and it asks once, with the count, before doing anything.
+  되돌릴 수 없는 동작이라 컨트롤러 단축키를 두지 않았고, 개수를 보여주는
+  확인 창을 한 번 거칩니다.
+
+- **Anything mid-send is deleted after it lands, not now.** Delete
+  something that is queued or uploading and the send finishes first, then
+  the file goes. Pulling a file out from under its own upload would just
+  fail the send, and one selection can hold both kinds at once - the
+  result says which was which ("3 deleted · 2 after sending").
+  **전송 중이거나 대기 중인 항목은 전송이 끝난 뒤 삭제됩니다.** 업로드
+  도중에 파일을 치우면 그 전송이 실패하기 때문입니다. 한 번의 선택에 두
+  종류가 섞일 수 있고, 결과를 구분해 알려줍니다("3개 삭제 · 2개는 전송 후
+  삭제"). 이 예약은 저장되므로 그 사이 플러그인이 재시작되어도 잊히지
+  않습니다.
+
+- **A tidy-up button** in the panel: clears entries Steam still lists for
+  media that is gone, refreshes its media list, and removes leftover
+  working files.
+  패널에 **정리 버튼**. 스팀 목록에 남은 유령 항목을 지우고, 목록을 새로
+  읽게 하고, 남은 임시 파일을 치웁니다.
+
+### Changed / 변경
+
+- **Media picked in the gallery is never auto-deleted**, even with
+  delete-after-sending on. The gallery is for reaching into what is
+  already on the Deck; losing an old screenshot because you shared it is
+  a poor surprise. Pressing Delete is of course still a request to delete.
+  **갤러리에서 고른 미디어는 자동삭제되지 않습니다**(자동삭제가 켜져
+  있어도). 공유했다고 옛 스크린샷이 사라지는 건 당황스러운 결과니까요.
+  물론 삭제 버튼을 누르는 건 별개입니다.
+- A clip Steam saved as a bookmark has no video in it and cannot be sent -
+  but that is the kind of clip most worth deleting, so it can be picked
+  now. Picked, it shows a red cross rather than the blue tick, because a
+  blue tick promises a send that will not happen.
+  영상이 없는 북마크 클립은 보낼 수 없지만 오히려 가장 지우고 싶은
+  대상이라, 이제 선택할 수 있습니다. 선택하면 파란 체크가 아니라 **빨간
+  X**로 표시됩니다 — 파란 체크는 "이건 나갑니다"라는 약속이니까요.
+- The gallery keeps up with what leaves the Deck: anything sent or deleted
+  while it is open drops out of your selection and out of the list.
+  갤러리가 기기 상태를 따라갑니다. 열어둔 사이에 전송·삭제된 항목은
+  선택에서도 목록에서도 빠집니다.
+
+### Fixed / 수정
+
+- Cached clip posters were never removed, so every clip ever deleted left
+  one behind for good. Swept at startup and by the tidy button.
+  삭제된 클립의 썸네일 캐시가 정리되지 않고 계속 쌓이던 문제. 시작할
+  때와 정리 버튼으로 치웁니다.
+- Deleting an item left its queue, retry and stalled bookkeeping behind.
+  A stalled entry kept counting towards "N items gave up" and kept its
+  line on disk, naming a file that no longer existed.
+  항목을 삭제해도 대기열·재시도·중단 기록이 남아, 없는 파일이 "N개
+  중단됨"으로 계속 세어지던 문제.
+- The English and Korean descriptions of delete-after-sending were missing
+  the sentence the other eight languages had, about gallery picks being
+  exempt.
+  "보낸 뒤 삭제" 설명에서 영어·한국어만 갤러리 예외 문장이 빠져 있던 문제.
+
 ## v0.4.1
 
 ### Fixed / 수정

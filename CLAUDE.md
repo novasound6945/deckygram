@@ -65,6 +65,10 @@ reaches the public repo:
 - Releases: bump `package.json` version FIRST, then tag `v*` (same number)
   → CI attaches `Deckygram-vX.Y.Z.zip`.  A stale package.json makes the
   panel advertise our own current release as an "update".
+- **Write the CHANGELOG section before tagging.** CI publishes the release
+  notes from the `## vX.Y.Z` section of CHANGELOG.md; with no section it
+  falls back to an auto-generated link and the release reads as empty.
+  (Three releases went out that way before this was automated.)
 - Attribution: this project is built with **Claude (Fable 5)** — keep the
   credit line at the bottom of README.md.
 

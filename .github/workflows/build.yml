@@ -71,12 +71,28 @@ jobs:
           #     releases/latest/download/Deckygram.zip always works for
           #     Decky's "Install plugin from URL".
           cp "${ZIP_NAME}" Deckygram.zip
+
+          # Release notes come from CHANGELOG.md - the section for this
+          # tag, up to the next "## v". Writing them by hand meant three
+          # releases went out with nothing but an auto-generated "Full
+          # Changelog" link while the notes sat in the repo unread.
+          awk -v want="## ${GITHUB_REF_NAME}" '
+            $0 == want { found = 1; next }
+            /^## v/     { if (found) exit }
+            found       { print }
+          ' CHANGELOG.md > notes.md
+          if [ "$(wc -c < notes.md)" -lt 50 ]; then
+            echo "No CHANGELOG section for ${GITHUB_REF_NAME}; generating notes."
+            NOTES_ARG="--generate-notes"
+          else
+            NOTES_ARG="--notes-file notes.md"
+          fi
+
           # Idempotent: re-pushing an existing tag (e.g. after a history
           # rewrite) refreshes the assets instead of failing on "already exists".
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             gh release upload "${GITHUB_REF_NAME}" "${ZIP_NAME}" Deckygram.zip --clobber
           else
             gh release create "${GITHUB_REF_NAME}" "${ZIP_NAME}" Deckygram.zip \
-              --title "Deckygram ${GITHUB_REF_NAME}" \
-              --generate-notes
+              --title "Deckygram ${GITHUB_REF_NAME}" ${NOTES_ARG}
           fi

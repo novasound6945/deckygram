@@ -4,6 +4,8 @@ import {
   Dropdown,
   Spinner,
   GamepadButton,
+  ConfirmModal,
+  showModal,
 } from "@decky/ui";
 import {
   addEventListener, callable, removeEventListener, toaster,
@@ -35,6 +37,10 @@ const galleryList = callable<
 const galleryGames = callable<[kind: string], GameEntry[]>("gallery_games");
 const galleryThumb = callable<[id: string], string>("gallery_thumb");
 const gallerySend = callable<[ids: string[]], { count: number }>("gallery_send");
+const galleryDelete = callable<
+  [ids: string[]],
+  { deleted: number; deferred: number; gone: number; failed: number }
+>("gallery_delete");
 
 const PAGE = 30;      // fills two screens of tiles; a page loads in a blink
 const THUMB_PARALLEL = 6;
@@ -136,14 +142,19 @@ const TILE_FOCUS_CSS = `
 function Tile({ item, thumb, picked, onToggle }: {
   item: MediaItem; thumb?: string; picked: boolean; onToggle: () => void;
 }) {
+  // Selectable even when it cannot be sent: a clip with no video in it is
+  // precisely the kind of thing you want to delete, and the send path
+  // skips these anyway. "Not sendable" is a statement about sending.
   return (
     <Focusable
       className="dg-tile"
-      onActivate={item.sendable ? onToggle : undefined}
+      onActivate={onToggle}
       style={{
         width: "100%", borderRadius: 6, overflow: "hidden",
         background: "#1a2332",
-        outline: picked ? "3px solid #2ea6ff" : "3px solid transparent",
+        outline: picked
+          ? (item.sendable ? "3px solid #2ea6ff" : "3px solid #d93b3b")
+          : "3px solid transparent",
         opacity: !item.sendable ? 0.4 : (item.sent && !picked ? 0.72 : 1),
       }}
     >
@@ -172,13 +183,18 @@ function Tile({ item, thumb, picked, onToggle }: {
             {item.too_long ? "⚠ " : "▶ "}{clipLength(item.seconds)}
           </span>
         )}
+        {/* Blue tick means "this is going out". Something that cannot be
+            sent is still worth picking - to delete it - but saying it the
+            same way would promise a send that never happens, so it gets a
+            red cross instead: picked, but not for sending. */}
         {picked && (
           <span style={{
             position: "absolute", left: 6, top: 6, width: 22, height: 22,
-            borderRadius: "50%", background: "#2ea6ff", color: "#fff",
+            borderRadius: "50%",
+            background: item.sendable ? "#2ea6ff" : "#d93b3b", color: "#fff",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: "0.8em", fontWeight: 700,
-          }}>✓</span>
+          }}>{item.sendable ? "✓" : "✕"}</span>
         )}
         {/* Already delivered once. Most of the library will be in this
             state, so it has to be a whisper - a dot and a slight dim -
@@ -302,8 +318,11 @@ export function GalleryPage() {
   }, [kind]);
 
   const toggle = (id: string) => setPicked((prev) => {
-    // Already on its way, or gone from the Deck while you were looking.
-    if (justQueued.has(id) || isGone(id)) return prev;
+    // Gone from the Deck while you were looking: nothing left to act on.
+    // Something merely on its way stays selectable - you may well want to
+    // delete what you just queued, and re-queueing an item that is already
+    // in the queue is a no-op, so blocking it only cost the delete.
+    if (isGone(id)) return prev;
     const next = new Set(prev);
     if (next.has(id)) {
       next.delete(id);
@@ -333,6 +352,50 @@ export function GalleryPage() {
     toaster.toast({ title: "Deckygram", body: t("gallery_queued", { n: r.count }) });
   };
 
+  /** Delete what is picked, once the user has said so twice. */
+  const runDelete = async () => {
+    setBusy(true);
+    const ids = [...picked];
+    const r = await galleryDelete(ids).catch(
+      () => ({ deleted: 0, deferred: 0, gone: 0, failed: ids.length }));
+    setBusy(false);
+    setPicked(new Set());
+    // Grey them out first: the deferred ones stay on the Deck until their
+    // send finishes, and leaving those selectable invites a second delete.
+    setJustQueued((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
+    // Then rebuild the page. Greying alone was the wrong call: what you
+    // deleted is still sitting there, and "it only goes away if I hit
+    // refresh" is a bug however it is rationalised. The churn this was
+    // meant to avoid needs a live selection, and the selection has just
+    // been cleared.
+    load(offset, kind, true, appids);
+    const parts: string[] = [];
+    if (r.deleted) parts.push(t("gallery_deleted", { n: r.deleted }));
+    if (r.deferred) parts.push(t("gallery_delete_after_send", { n: r.deferred }));
+    if (r.failed) parts.push(t("gallery_delete_failed", { n: r.failed }));
+    toaster.toast({
+      title: "Deckygram",
+      body: parts.join(" · ") || t("gallery_delete_nothing"),
+    });
+  };
+
+  const confirmDelete = () => {
+    if (!picked.size) return;
+    showModal(
+      <ConfirmModal
+        bDestructiveWarning
+        strTitle={t("gallery_delete_title")}
+        strDescription={t("gallery_delete_body", { n: picked.size })}
+        strOKButtonText={t("gallery_delete")}
+        onOK={() => { void runDelete(); }}
+      />,
+    );
+  };
+
   const total = page?.total ?? 0;
   const pageNo = Math.floor(offset / PAGE) + 1;
   const pages = Math.max(1, Math.ceil(total / PAGE));
@@ -347,6 +410,11 @@ export function GalleryPage() {
   // the batch - "30 picked" reads very differently at 2 clips vs 28.
   const pickedClips = (page?.items ?? [])
     .filter((i) => picked.has(i.id) && i.kind === "clip").length;
+  // These can be picked so they can be deleted, but sending skips them.
+  // Without saying so, picking three and being told two were queued reads
+  // as a bug.
+  const pickedUnsendable = (page?.items ?? [])
+    .filter((i) => picked.has(i.id) && !i.sendable && !isGone(i.id)).length;
   // Already on their way, so not candidates for "select page" either.
   const sendableOnPage = (page?.items ?? [])
     .filter((i) => i.sendable && !justQueued.has(i.id) && !isGone(i.id));
@@ -410,7 +478,9 @@ export function GalleryPage() {
               (picked.size >= MAX_PICKS ? " (" + t("gallery_pick_cap", { max: MAX_PICKS }) + ")" : "") +
               (pickedClips > 2 ? " · " + t("gallery_picked_clips", { n: pickedClips }) : "") +
               (elsewhere > 0 ? " · " + t("gallery_picked_elsewhere", { n: elsewhere }) : "") +
-              (pickedTooLong > 0 ? " · " + t("gallery_too_long_warn", { n: pickedTooLong }) : "")
+              (pickedTooLong > 0 ? " · " + t("gallery_too_long_warn", { n: pickedTooLong }) : "") +
+              (pickedUnsendable > 0
+                ? " · " + t("gallery_pick_delete_only", { n: pickedUnsendable }) : "")
             : t("gallery_subtitle")}
         </span>
       </div>
@@ -450,8 +520,19 @@ export function GalleryPage() {
             })}
           />
         </div>
-        {/* An action, not a filter: pushed away from both. */}
+        {/* Actions, not filters: pushed away from both. */}
         <div style={{ flex: 1 }} />
+        {/* Deliberately a button and not a gamepad shortcut. Sending the
+            wrong thing is embarrassing; deleting it is permanent, so this
+            one has to be aimed at, and then confirmed. */}
+        <DialogButton
+          disabled={!picked.size || busy}
+          onClick={confirmDelete}
+          style={{ width: "auto", minWidth: 110, padding: "8px 14px" }}
+        >
+          {picked.size ? t("gallery_delete_n", { n: picked.size })
+                       : t("gallery_delete")}
+        </DialogButton>
         <DialogButton
           onClick={() => { setGames(null); load(offset, kind, true, appids); }}
           style={{ width: "auto", minWidth: 110, padding: "8px 14px" }}

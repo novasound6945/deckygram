@@ -53,7 +53,7 @@ const en: Dict = {
   only_new_note_dc:
     "Only media captured while sending is ON gets sent - anything taken while paused stays on the Deck. If you're offline, sends are retried automatically once you're back online. Clips are capped by your Discord server's upload limit (10 MB on a free server), so anything over ~3 minutes is skipped with a toast.",
   delete_after_desc_dc:
-    "Frees space once media is safely in Discord. Removed items disappear from the Steam gallery.",
+    "Frees space once media is safely in Discord. Removed items disappear from the Steam gallery. Media you pick in the gallery is never deleted.",
   setup_broken_dc: "Discord rejected this webhook",
   setup_broken_desc_dc:
     "Sending is paused - retrying cannot fix this. The webhook or its channel was probably deleted. Reason: {why}",
@@ -106,7 +106,7 @@ const en: Dict = {
     "Only media captured while sending is ON gets sent - anything taken while paused stays on the Deck. If you're offline, sends are retried automatically once you're back online. Clips too long to fit under Telegram's 50 MB bot limit are skipped (you'll get a toast).",
   delete_after: "Delete from Deck after sending",
   delete_after_desc:
-    "Frees space once media is safely in Telegram. Removed items disappear from the Steam gallery.",
+    "Frees space once media is safely in Telegram. Removed items disappear from the Steam gallery. Media you pick in the gallery is never deleted.",
   status: "Status",
   version: "Version",
   update_available: "Update available: {v}",
@@ -162,6 +162,16 @@ const en: Dict = {
   tidy_running: "Tidying...",
   tidy_done: "Tidied {n} item(s)",
   tidy_clean: "Nothing to tidy",
+  gallery_delete: "Delete",
+  gallery_delete_n: "Delete {n}",
+  gallery_delete_title: "Delete from this Deck?",
+  gallery_delete_body:
+    "{n} item(s) will be removed from this Deck for good. Anything already sent stays where you sent it.",
+  gallery_deleted: "{n} deleted",
+  gallery_delete_after_send: "{n} after sending",
+  gallery_delete_failed: "{n} could not be deleted",
+  gallery_delete_nothing: "Nothing to delete",
+  gallery_pick_delete_only: "{n} cannot be sent (delete only)",
   no_token: "no token",
 };
 
@@ -201,7 +211,7 @@ const ko: Dict = {
   only_new_note_dc:
     "전송이 켜져 있는 동안 찍은 것만 보냅니다 - 꺼져 있는 동안 찍은 미디어는 기기에만 남습니다. 오프라인이면 온라인 복귀 후 자동으로 재시도해 보냅니다. 클립은 디스코드 서버의 업로드 한도(무료 서버 10MB)를 따르므로, 약 3분이 넘으면 건너뛰고 토스트로 알려드립니다.",
   delete_after_desc_dc:
-    "디스코드에 안전히 전송된 미디어를 지워 공간을 확보합니다. 스팀 갤러리에서도 사라집니다.",
+    "디스코드에 안전히 전송된 미디어를 지워 공간을 확보합니다. 스팀 갤러리에서도 사라집니다. 갤러리에서 직접 고른 미디어는 삭제되지 않습니다.",
   setup_broken_dc: "디스코드가 이 웹훅을 거부했습니다",
   setup_broken_desc_dc:
     "전송을 일시 중단했습니다 - 재시도로는 해결되지 않습니다. 웹훅이나 해당 채널이 삭제되었을 가능성이 높습니다. 사유: {why}",
@@ -254,7 +264,7 @@ const ko: Dict = {
     "전송이 켜져 있는 동안 찍은 것만 보냅니다 - 꺼져 있는 동안 찍은 미디어는 기기에만 남습니다. 오프라인이면 온라인 복귀 후 자동으로 재시도해 보냅니다. 텔레그램 봇 한도(50MB)에 맞출 수 없는 긴 클립은 건너뛰며, 토스트로 알려드립니다.",
   delete_after: "보낸 뒤 기기에서 삭제",
   delete_after_desc:
-    "텔레그램에 안전히 전송된 미디어를 지워 공간을 확보합니다. 스팀 갤러리에서도 사라집니다.",
+    "텔레그램에 안전히 전송된 미디어를 지워 공간을 확보합니다. 스팀 갤러리에서도 사라집니다. 갤러리에서 직접 고른 미디어는 삭제되지 않습니다.",
   status: "상태",
   version: "버전",
   update_available: "업데이트 있음: {v}",
@@ -310,6 +320,16 @@ const ko: Dict = {
   tidy_running: "정리 중...",
   tidy_done: "{n}개 정리했습니다",
   tidy_clean: "정리할 항목이 없습니다",
+  gallery_delete: "삭제",
+  gallery_delete_n: "{n}개 삭제",
+  gallery_delete_title: "이 기기에서 삭제할까요?",
+  gallery_delete_body:
+    "{n}개를 이 기기에서 완전히 지웁니다. 이미 보낸 것은 보낸 곳에 그대로 남습니다.",
+  gallery_deleted: "{n}개 삭제됨",
+  gallery_delete_after_send: "{n}개는 전송 후 삭제",
+  gallery_delete_failed: "{n}개 삭제 실패",
+  gallery_delete_nothing: "삭제할 항목이 없습니다",
+  gallery_pick_delete_only: "{n}개는 전송 불가 (삭제만 가능)",
   no_token: "토큰 없음",
 };
 
@@ -458,6 +478,16 @@ const de: Dict = {
   tidy_running: "Räume auf...",
   tidy_done: "{n} Element(e) aufgeräumt",
   tidy_clean: "Nichts aufzuräumen",
+  gallery_delete: "Löschen",
+  gallery_delete_n: "{n} löschen",
+  gallery_delete_title: "Von diesem Deck löschen?",
+  gallery_delete_body:
+    "{n} Element(e) werden endgültig von diesem Deck entfernt. Bereits Gesendetes bleibt dort, wohin du es geschickt hast.",
+  gallery_deleted: "{n} gelöscht",
+  gallery_delete_after_send: "{n} nach dem Senden",
+  gallery_delete_failed: "{n} nicht löschbar",
+  gallery_delete_nothing: "Nichts zu löschen",
+  gallery_pick_delete_only: "{n} nicht sendbar (nur löschbar)",
   no_token: "kein Token",
 };
 
@@ -606,6 +636,16 @@ const fr: Dict = {
   tidy_running: "Nettoyage...",
   tidy_done: "{n} élément(s) nettoyé(s)",
   tidy_clean: "Rien à nettoyer",
+  gallery_delete: "Supprimer",
+  gallery_delete_n: "Supprimer {n}",
+  gallery_delete_title: "Supprimer de ce Deck ?",
+  gallery_delete_body:
+    "{n} élément(s) seront définitivement retirés de ce Deck. Ce qui est déjà envoyé reste là où vous l'avez envoyé.",
+  gallery_deleted: "{n} supprimé(s)",
+  gallery_delete_after_send: "{n} après l'envoi",
+  gallery_delete_failed: "{n} non supprimé(s)",
+  gallery_delete_nothing: "Rien à supprimer",
+  gallery_pick_delete_only: "{n} non envoyable(s) (suppression seule)",
   no_token: "aucun jeton",
 };
 
@@ -754,6 +794,16 @@ const ru: Dict = {
   tidy_running: "Уборка...",
   tidy_done: "Прибрано: {n}",
   tidy_clean: "Убирать нечего",
+  gallery_delete: "Удалить",
+  gallery_delete_n: "Удалить: {n}",
+  gallery_delete_title: "Удалить с этого Deck?",
+  gallery_delete_body:
+    "{n} файл(ов) будет удалено с этого Deck безвозвратно. Уже отправленное останется там, куда вы его отправили.",
+  gallery_deleted: "Удалено: {n}",
+  gallery_delete_after_send: "После отправки: {n}",
+  gallery_delete_failed: "Не удалось удалить: {n}",
+  gallery_delete_nothing: "Удалять нечего",
+  gallery_pick_delete_only: "{n} нельзя отправить (только удалить)",
   no_token: "нет токена",
 };
 
@@ -902,6 +952,16 @@ const ptBr: Dict = {
   tidy_running: "Limpando...",
   tidy_done: "{n} item(ns) limpo(s)",
   tidy_clean: "Nada a limpar",
+  gallery_delete: "Excluir",
+  gallery_delete_n: "Excluir {n}",
+  gallery_delete_title: "Excluir deste Deck?",
+  gallery_delete_body:
+    "{n} item(ns) serão removidos deste Deck para sempre. O que já foi enviado continua onde você enviou.",
+  gallery_deleted: "{n} excluído(s)",
+  gallery_delete_after_send: "{n} após o envio",
+  gallery_delete_failed: "{n} não puderam ser excluídos",
+  gallery_delete_nothing: "Nada a excluir",
+  gallery_pick_delete_only: "{n} não pode(m) ser enviado(s) (só excluir)",
   no_token: "sem token",
 };
 
@@ -1050,6 +1110,16 @@ const pl: Dict = {
   tidy_running: "Porządkowanie...",
   tidy_done: "Uporządkowano: {n}",
   tidy_clean: "Nie ma czego porządkować",
+  gallery_delete: "Usuń",
+  gallery_delete_n: "Usuń {n}",
+  gallery_delete_title: "Usunąć z tego Decka?",
+  gallery_delete_body:
+    "{n} pozycji zostanie trwale usuniętych z tego Decka. To, co już wysłano, zostaje tam, gdzie trafiło.",
+  gallery_deleted: "Usunięto: {n}",
+  gallery_delete_after_send: "Po wysłaniu: {n}",
+  gallery_delete_failed: "Nie udało się usunąć: {n}",
+  gallery_delete_nothing: "Nie ma czego usuwać",
+  gallery_pick_delete_only: "{n} nie do wysłania (tylko usunięcie)",
   no_token: "brak tokenu",
 };
 
@@ -1198,6 +1268,16 @@ const tr: Dict = {
   tidy_running: "Toparlanıyor...",
   tidy_done: "{n} öğe toparlandı",
   tidy_clean: "Toparlanacak bir şey yok",
+  gallery_delete: "Sil",
+  gallery_delete_n: "{n} tanesini sil",
+  gallery_delete_title: "Bu Deck'ten silinsin mi?",
+  gallery_delete_body:
+    "{n} öğe bu Deck'ten kalıcı olarak silinecek. Zaten gönderilenler gönderdiğin yerde kalır.",
+  gallery_deleted: "{n} silindi",
+  gallery_delete_after_send: "{n} gönderimden sonra",
+  gallery_delete_failed: "{n} silinemedi",
+  gallery_delete_nothing: "Silinecek bir şey yok",
+  gallery_pick_delete_only: "{n} gönderilemez (yalnızca silinebilir)",
   no_token: "jeton yok",
 };
 
@@ -1237,7 +1317,7 @@ const zhCn: Dict = {
   only_new_note_dc:
     "只有在发送开启期间捕获的内容才会被发送——暂停期间拍摄的内容会留在 Deck 上。离线时，恢复联网后会自动重试。视频片段受你的 Discord 服务器上传上限限制（免费服务器为 10 MB），因此超过约 3 分钟的片段会被跳过并弹出提示。",
   delete_after_desc_dc:
-    "在内容安全送达 Discord 后释放空间。删除的项目也会从 Steam 图库中消失。 在图库中手动挑选的内容不会被删除。",
+    "在内容安全送达 Discord 后释放空间。删除的项目也会从 Steam 图库中消失。在图库中手动挑选的内容不会被删除。",
   setup_broken_dc: "Discord 拒绝了此 Webhook",
   setup_broken_desc_dc:
     "发送已暂停——重试无法解决。该 Webhook 或其频道可能已被删除。原因：{why}",
@@ -1290,7 +1370,7 @@ const zhCn: Dict = {
     "只有在发送开启期间捕获的内容才会被发送——暂停期间拍摄的内容会留在 Deck 上。离线时，恢复联网后会自动重试。无法压缩到 Telegram 机器人 50 MB 上限内的片段会被跳过（会有提示）。",
   delete_after: "发送后从 Deck 删除",
   delete_after_desc:
-    "在内容安全送达 Telegram 后释放空间。删除的项目也会从 Steam 图库中消失。 在图库中手动挑选的内容不会被删除。",
+    "在内容安全送达 Telegram 后释放空间。删除的项目也会从 Steam 图库中消失。在图库中手动挑选的内容不会被删除。",
   status: "状态",
   version: "版本",
   update_available: "有可用更新：{v}",
@@ -1346,6 +1426,16 @@ const zhCn: Dict = {
   tidy_running: "正在整理...",
   tidy_done: "已整理 {n} 项",
   tidy_clean: "没有需要整理的内容",
+  gallery_delete: "删除",
+  gallery_delete_n: "删除 {n} 项",
+  gallery_delete_title: "从这台 Deck 删除？",
+  gallery_delete_body:
+    "{n} 项将从这台 Deck 上永久删除。已经发送出去的内容仍会留在你发送的地方。",
+  gallery_deleted: "已删除 {n} 项",
+  gallery_delete_after_send: "{n} 项将在发送后删除",
+  gallery_delete_failed: "{n} 项删除失败",
+  gallery_delete_nothing: "没有需要删除的内容",
+  gallery_pick_delete_only: "{n} 项无法发送（仅可删除）",
   no_token: "无令牌",
 };
 
@@ -1385,7 +1475,7 @@ const zhTw: Dict = {
   only_new_note_dc:
     "只有在傳送開啟期間擷取的內容才會送出——暫停期間拍攝的內容會留在 Deck 上。離線時，恢復連線後會自動重試。影片片段受你的 Discord 伺服器上傳上限限制（免費伺服器為 10 MB），因此超過約 3 分鐘的片段會被略過並顯示提示。",
   delete_after_desc_dc:
-    "在內容安全送達 Discord 後釋出空間。移除的項目也會從 Steam 圖庫中消失。 在圖庫中手動挑選的內容不會被刪除。",
+    "在內容安全送達 Discord 後釋出空間。移除的項目也會從 Steam 圖庫中消失。在圖庫中手動挑選的內容不會被刪除。",
   setup_broken_dc: "Discord 拒絕了這個 Webhook",
   setup_broken_desc_dc:
     "傳送已暫停——重試無法解決。該 Webhook 或其頻道可能已被刪除。原因：{why}",
@@ -1438,7 +1528,7 @@ const zhTw: Dict = {
     "只有在傳送開啟期間擷取的內容才會送出——暫停期間拍攝的內容會留在 Deck 上。離線時，恢復連線後會自動重試。無法壓縮到 Telegram 機器人 50 MB 上限內的片段會被略過（會顯示提示）。",
   delete_after: "傳送後從 Deck 刪除",
   delete_after_desc:
-    "在內容安全送達 Telegram 後釋出空間。移除的項目也會從 Steam 圖庫中消失。 在圖庫中手動挑選的內容不會被刪除。",
+    "在內容安全送達 Telegram 後釋出空間。移除的項目也會從 Steam 圖庫中消失。在圖庫中手動挑選的內容不會被刪除。",
   status: "狀態",
   version: "版本",
   update_available: "有可用更新：{v}",
@@ -1494,6 +1584,16 @@ const zhTw: Dict = {
   tidy_running: "正在整理...",
   tidy_done: "已整理 {n} 項",
   tidy_clean: "沒有需要整理的內容",
+  gallery_delete: "刪除",
+  gallery_delete_n: "刪除 {n} 項",
+  gallery_delete_title: "從這台 Deck 刪除？",
+  gallery_delete_body:
+    "{n} 項將從這台 Deck 上永久刪除。已經傳送出去的內容仍會留在你傳送的地方。",
+  gallery_deleted: "已刪除 {n} 項",
+  gallery_delete_after_send: "{n} 項將在傳送後刪除",
+  gallery_delete_failed: "{n} 項刪除失敗",
+  gallery_delete_nothing: "沒有需要刪除的內容",
+  gallery_pick_delete_only: "{n} 項無法傳送（僅可刪除）",
   no_token: "無權杖",
 };
 

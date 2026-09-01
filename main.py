@@ -11,7 +11,8 @@ import os
 import decky
 from deckygram import destinations, discord, media, tg
 from deckygram.appname import AppNameResolver
-from deckygram import library
+from deckygram import deletion, library
+from deckygram import sender as sender_mod
 from deckygram.gallery import Gallery
 from deckygram.pairing import PairingServer
 from deckygram.updates import UpdateChecker
@@ -293,6 +294,101 @@ class Plugin:
     # backstop, since a queue of hundreds would mean hours of encoding.
     MAX_PICKS = 20
 
+    async def _sweep_deletes_later(self):
+        """Remove anything Steam was asked to delete but did not."""
+        try:
+            await asyncio.sleep(sender_mod.CLIP_DELETE_GRACE + 1)
+            self.watcher.sender.sweep_clip_deletes()
+            self.watcher.sender.sweep_media_deletes()
+        except Exception as e:
+            decky.logger.info("delete sweep failed: %r" % (e,))
+
+    async def gallery_delete(self, item_ids: list) -> dict:
+        """Delete hand-picked media, or arrange for it once it is sent.
+
+        A selection can hold items in different states at once - one idle,
+        one mid-upload, one whose file already went - so each is sorted by
+        deckygram.deletion and handled on its own terms. Returns the counts
+        so the UI can say what actually happened rather than guessing.
+        """
+        w = self.watcher
+        # The queue only drains when sending is on and nothing has
+        # suspended it; otherwise "delete after sending" would mean never.
+        sending_active = bool(self._load().get("enabled")) and not w.sender.blocked()
+
+        def state(item):
+            return {
+                "exists": os.path.exists(item),
+                "in_flight": w.sender.in_flight(item),
+                "pending": item in w.qs.pending,
+                "sending_active": sending_active,
+            }
+
+        def is_clip(item):
+            """Clip or screenshot - answerable even once the file is gone.
+
+            isdir() cannot tell us: a deleted clip folder is not a
+            directory any more, and everything would look like a
+            screenshot. The path still says which it was.
+            """
+            if os.path.exists(item):
+                return os.path.isdir(item)
+            return "/clips/" in item.replace("\\", "/")
+
+        buckets = deletion.plan(item_ids or [], state)
+        failed = []
+
+        for item in buckets[deletion.NOW]:
+            try:
+                # Same route as delete-after-sending: ask Steam, so its own
+                # media list stays right, and fall back after a grace period.
+                if is_clip(item):
+                    w.sender._delete_clip(item)
+                else:
+                    w.sender._delete_media(item)
+                # The file is going; its queue, retry and stalled entries
+                # have to go with it, or it keeps counting as work waiting.
+                w.qs.forget_item(item)
+            except Exception as e:
+                decky.logger.info("gallery delete failed: %s - %r" % (item, e))
+                failed.append(item)
+
+        for item in buckets[deletion.AFTER_SEND]:
+            w.qs.want_delete(item)
+
+        for item in buckets[deletion.GONE]:
+            # Nothing on disk, but Steam may still be listing it and our
+            # own bookkeeping may still be holding a promise.
+            w.qs.forget_item(item)
+            if is_clip(item):
+                w.sender.notify("clip_delete", os.path.basename(item), "")
+            else:
+                w.sender.notify("media_delete", w.sender._steam_tail(item), "")
+
+        # The listing is cached for a few seconds while paging; after a
+        # delete that cache would still offer what was just removed.
+        self.gallery.invalidate()
+
+        # Steam gets a few seconds to do the deleting, then we clean up
+        # whatever it did not. That sweep normally rides the watcher loop,
+        # which does not run while sending is off - and deleting from the
+        # gallery has nothing to do with sending. Without this, a file
+        # Steam could not delete would simply stay (found on hardware,
+        # 2026-09-01).
+        if buckets[deletion.NOW]:
+            asyncio.get_event_loop().create_task(self._sweep_deletes_later())
+
+        decky.logger.info(
+            "gallery delete: %d now, %d after sending, %d already gone, %d failed"
+            % (len(buckets[deletion.NOW]), len(buckets[deletion.AFTER_SEND]),
+               len(buckets[deletion.GONE]), len(failed)))
+        return {
+            "deleted": len(buckets[deletion.NOW]) - len(failed),
+            "deferred": len(buckets[deletion.AFTER_SEND]),
+            "gone": len(buckets[deletion.GONE]),
+            "failed": len(failed),
+        }
+
     async def gallery_send(self, item_ids: list) -> dict:
         """Queue hand-picked items, bypassing the only-while-on rule."""
         w = self.watcher
@@ -351,10 +447,18 @@ class Plugin:
         return {"ok": True}
 
     async def cleanup_temps(self) -> dict:
-        """Delete compression temp files left behind by an interrupted send."""
+        """Delete working files nothing needs any more.
+
+        Compression temps orphaned by an interrupted send, and cached clip
+        posters whose clip has since been deleted - every clip ever
+        sent-and-deleted used to leave one behind for good.
+        """
         n, freed = media.clear_stale_temps(decky.DECKY_PLUGIN_RUNTIME_DIR)
+        pn, pfreed = self.gallery.sweep_orphan_posters()
+        n += pn
+        freed += pfreed
         if n:
-            decky.logger.info("tidy: cleared %d temp file(s), %.1f MB"
+            decky.logger.info("tidy: cleared %d leftover file(s), %.1f MB"
                               % (n, freed / 1e6))
         return {"count": n, "bytes": freed}
 
@@ -409,6 +513,7 @@ class Plugin:
         if stale:
             decky.logger.info("cleared %d abandoned temp file(s), %.1f MB"
                               % (stale, freed / 1e6))
+        # Posters are swept once the gallery exists; see below.
         resolver = AppNameResolver(home, os.path.join(state_dir, "appnames.json"))
         self.watcher = Watcher(
             home=home,
@@ -419,6 +524,14 @@ class Plugin:
             log=decky.logger.info,
         )
         self.gallery = Gallery(home, state_dir, resolver, log=decky.logger.info)
+        pn, pfreed = self.gallery.sweep_orphan_posters()
+        if pn:
+            decky.logger.info("cleared %d orphaned clip poster(s), %.1f MB"
+                              % (pn, pfreed / 1e6))
+        stale_promises = self.watcher.qs.prune_delete_promises()
+        if stale_promises:
+            decky.logger.info("dropped %d delete promise(s) for media that "
+                              "is already gone" % stale_promises)
         self.pairing = PairingServer(self._accept_token, self._accept_webhook,
                                      log=decky.logger.info)
         self.version = _plugin_version()
