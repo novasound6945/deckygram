@@ -172,6 +172,7 @@ const en: Dict = {
   gallery_delete_failed: "{n} could not be deleted",
   gallery_delete_nothing: "Nothing to delete",
   gallery_pick_delete_only: "{n} cannot be sent (delete only)",
+  gallery_delete_pending: "deleting after send",
   no_token: "no token",
 };
 
@@ -330,6 +331,7 @@ const ko: Dict = {
   gallery_delete_failed: "{n}개 삭제 실패",
   gallery_delete_nothing: "삭제할 항목이 없습니다",
   gallery_pick_delete_only: "{n}개는 전송 불가 (삭제만 가능)",
+  gallery_delete_pending: "전송 후 삭제 예정",
   no_token: "토큰 없음",
 };
 
@@ -488,6 +490,7 @@ const de: Dict = {
   gallery_delete_failed: "{n} nicht löschbar",
   gallery_delete_nothing: "Nichts zu löschen",
   gallery_pick_delete_only: "{n} nicht sendbar (nur löschbar)",
+  gallery_delete_pending: "wird nach dem Senden gelöscht",
   no_token: "kein Token",
 };
 
@@ -646,6 +649,7 @@ const fr: Dict = {
   gallery_delete_failed: "{n} non supprimé(s)",
   gallery_delete_nothing: "Rien à supprimer",
   gallery_pick_delete_only: "{n} non envoyable(s) (suppression seule)",
+  gallery_delete_pending: "supprimé après l'envoi",
   no_token: "aucun jeton",
 };
 
@@ -804,6 +808,7 @@ const ru: Dict = {
   gallery_delete_failed: "Не удалось удалить: {n}",
   gallery_delete_nothing: "Удалять нечего",
   gallery_pick_delete_only: "{n} нельзя отправить (только удалить)",
+  gallery_delete_pending: "удалится после отправки",
   no_token: "нет токена",
 };
 
@@ -962,6 +967,7 @@ const ptBr: Dict = {
   gallery_delete_failed: "{n} não puderam ser excluídos",
   gallery_delete_nothing: "Nada a excluir",
   gallery_pick_delete_only: "{n} não pode(m) ser enviado(s) (só excluir)",
+  gallery_delete_pending: "será excluído após o envio",
   no_token: "sem token",
 };
 
@@ -1120,6 +1126,7 @@ const pl: Dict = {
   gallery_delete_failed: "Nie udało się usunąć: {n}",
   gallery_delete_nothing: "Nie ma czego usuwać",
   gallery_pick_delete_only: "{n} nie do wysłania (tylko usunięcie)",
+  gallery_delete_pending: "usunięcie po wysłaniu",
   no_token: "brak tokenu",
 };
 
@@ -1278,6 +1285,7 @@ const tr: Dict = {
   gallery_delete_failed: "{n} silinemedi",
   gallery_delete_nothing: "Silinecek bir şey yok",
   gallery_pick_delete_only: "{n} gönderilemez (yalnızca silinebilir)",
+  gallery_delete_pending: "gönderimden sonra silinecek",
   no_token: "jeton yok",
 };
 
@@ -1436,6 +1444,7 @@ const zhCn: Dict = {
   gallery_delete_failed: "{n} 项删除失败",
   gallery_delete_nothing: "没有需要删除的内容",
   gallery_pick_delete_only: "{n} 项无法发送（仅可删除）",
+  gallery_delete_pending: "发送后删除",
   no_token: "无令牌",
 };
 
@@ -1594,6 +1603,7 @@ const zhTw: Dict = {
   gallery_delete_failed: "{n} 項刪除失敗",
   gallery_delete_nothing: "沒有需要刪除的內容",
   gallery_pick_delete_only: "{n} 項無法傳送（僅可刪除）",
+  gallery_delete_pending: "傳送後刪除",
   no_token: "無權杖",
 };
 

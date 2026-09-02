@@ -2,6 +2,31 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.5.1
+
+### Fixed / 수정
+
+- **A deleted clip stayed in the gallery until you hit refresh.** The list
+  was rebuilt from disk the moment the delete was requested - but Steam
+  had not deleted anything yet, so the clip was read straight back in.
+  Screenshots happened to survive this because their deletion lands in a
+  few hundred milliseconds; a clip, whose fallback removal waits out a
+  grace period, came back every time. Deleted items now leave the grid on
+  the request itself, so it no longer depends on timing at all.
+  **삭제한 클립이 새로고침 전까지 갤러리에 남아 있던 문제.** 삭제를
+  요청한 즉시 목록을 디스크에서 다시 읽는데, 그 시점엔 스팀이 아직 지우지
+  않아 그대로 다시 읽혔습니다. 스크린샷은 삭제가 빨라 우연히 넘어갔고,
+  폴백까지 유예가 있는 클립은 매번 되살아났습니다. 이제 요청 시점에
+  목록에서 빠지므로 타이밍에 기대지 않습니다.
+
+### Changed / 변경
+
+- Media that cannot be deleted yet, because it is in the middle of being
+  sent, now says so on the tile: **deleting after send**. Greyed out with
+  no explanation, it read as a delete that had failed.
+  전송 중이라 아직 지울 수 없는 항목에 **"전송 후 삭제 예정"**을
+  표시합니다. 설명 없이 회색으로만 두면 삭제가 실패한 것처럼 보입니다.
+
 ## v0.5.0
 
 ### Added / 추가

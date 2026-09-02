@@ -1,6 +1,6 @@
 {
   "name": "deckygram",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Send Steam Deck screenshots and clips straight to Telegram, captioned with the game name.",
   "type": "module",
   "scripts": {

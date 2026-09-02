@@ -39,7 +39,10 @@ const galleryThumb = callable<[id: string], string>("gallery_thumb");
 const gallerySend = callable<[ids: string[]], { count: number }>("gallery_send");
 const galleryDelete = callable<
   [ids: string[]],
-  { deleted: number; deferred: number; gone: number; failed: number }
+  {
+    deleted: number; deferred: number; gone: number; failed: number;
+    deferred_ids: string[];
+  }
 >("gallery_delete");
 
 const PAGE = 30;      // fills two screens of tiles; a page loads in a blink
@@ -139,8 +142,9 @@ const TILE_FOCUS_CSS = `
   z-index: 1;
 }`;
 
-function Tile({ item, thumb, picked, onToggle }: {
+function Tile({ item, thumb, picked, onToggle, pendingDelete }: {
   item: MediaItem; thumb?: string; picked: boolean; onToggle: () => void;
+  pendingDelete?: boolean;
 }) {
   // Selectable even when it cannot be sent: a clip with no video in it is
   // precisely the kind of thing you want to delete, and the send path
@@ -196,6 +200,16 @@ function Tile({ item, thumb, picked, onToggle }: {
             fontSize: "0.8em", fontWeight: 700,
           }}>{item.sendable ? "✓" : "✕"}</span>
         )}
+        {/* Deleting it has to wait for the send it is in the middle of.
+            Without saying so, the tile just looks like a delete that did
+            not work. */}
+        {pendingDelete && (
+          <span style={{
+            position: "absolute", left: 6, bottom: 6, padding: "1px 7px",
+            borderRadius: 4, fontSize: "0.72em", fontWeight: 600,
+            background: "rgba(160,40,40,0.88)", color: "#ffd9d9",
+          }}>{t("gallery_delete_pending")}</span>
+        )}
         {/* Already delivered once. Most of the library will be in this
             state, so it has to be a whisper - a dot and a slight dim -
             rather than a badge on every tile. */}
@@ -242,6 +256,8 @@ export function GalleryPage() {
   // you walked in, so without this the watcher can send and delete a shot
   // behind your back and its tile still invites you to send it again.
   const [gone, setGone] = useState<Set<string>>(new Set());
+  // Asked to be deleted, but mid-send: it goes once the send lands.
+  const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     // The backend names what it deleted by its tail ("<appid>/screenshots/
@@ -367,11 +383,18 @@ export function GalleryPage() {
       for (const id of ids) next.add(id);
       return next;
     });
-    // Then rebuild the page. Greying alone was the wrong call: what you
-    // deleted is still sitting there, and "it only goes away if I hit
-    // refresh" is a bug however it is rationalised. The churn this was
-    // meant to avoid needs a live selection, and the selection has just
-    // been cleared.
+    // Anything that could not go yet stays on screen, so say why. Left
+    // merely greyed it reads as "the delete did not work".
+    setPendingDelete((prev) => {
+      const next = new Set(prev);
+      for (const id of r.deferred_ids ?? []) next.add(id);
+      return next;
+    });
+    // Deleted tiles leave the grid the moment the backend confirms the
+    // request, via the `gone` filter - not by reloading the page. A reload
+    // here reads the disk before Steam has actually deleted anything, so
+    // the item comes straight back; a clip, whose fallback removal waits
+    // out a grace period, came back every time.
     load(offset, kind, true, appids);
     const parts: string[] = [];
     if (r.deleted) parts.push(t("gallery_deleted", { n: r.deleted }));
@@ -602,8 +625,9 @@ export function GalleryPage() {
             gap: 14, marginBottom: 22, alignItems: "start",
           }}
         >
-          {page.items.map((it) => (
+          {page.items.filter((it) => !isGone(it.id)).map((it) => (
             <Tile key={it.id}
+              pendingDelete={pendingDelete.has(it.id)}
               item={{
                 ...it,
                 sent: it.sent || justQueued.has(it.id) || isGone(it.id),

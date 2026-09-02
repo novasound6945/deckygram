@@ -387,6 +387,9 @@ class Plugin:
             "deferred": len(buckets[deletion.AFTER_SEND]),
             "gone": len(buckets[deletion.GONE]),
             "failed": len(failed),
+            # Which ones are waiting, so the gallery can say so on the tile
+            # instead of leaving them looking merely undeleted.
+            "deferred_ids": buckets[deletion.AFTER_SEND],
         }
 
     async def gallery_send(self, item_ids: list) -> dict:
