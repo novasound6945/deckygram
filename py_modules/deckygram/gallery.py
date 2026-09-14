@@ -20,7 +20,7 @@ import subprocess
 import threading
 import time
 
-from . import captions
+from . import captions, steamcfg
 
 THUMB_MAX = 64 * 1024        # skip anything absurd rather than blow up the UI
 POSTER_SIZE = "320:-2"       # clip posters: wide enough to read, small enough to fly
@@ -92,11 +92,7 @@ class Gallery:
                     yield f
 
     def _clips(self):
-        for root in glob.glob(os.path.join(
-                self.home, ".steam/steam/userdata/*/gamerecordings/clips")):
-            for d in glob.glob(os.path.join(root, "*")):
-                if os.path.isdir(d):
-                    yield d
+        return steamcfg.clip_dirs(self.home)
 
     def _clip_mpd(self, clip_dir: str):
         """The DASH manifest, or None.

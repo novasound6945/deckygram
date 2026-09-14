@@ -29,7 +29,7 @@ import os
 import threading
 import time
 
-from . import media
+from . import media, steamcfg
 from .inotify import Inotify
 from .qstate import QueueState
 from .sender import Sender, SETTLE_SEC
@@ -69,8 +69,9 @@ class Watcher:
             self.home, ".steam/steam/userdata/*/760/remote/*/screenshots"))
 
     def _clip_roots(self):
-        return glob.glob(os.path.join(
-            self.home, ".steam/steam/userdata/*/gamerecordings/clips"))
+        # Not just the default location: Settings > Game Recording can
+        # move the whole tree to an SD card.  See deckygram.steamcfg.
+        return steamcfg.clip_roots(self.home)
 
     def clip_roots(self):
         """Where Steam keeps clip folders - see deckygram.library."""
@@ -101,10 +102,10 @@ class Watcher:
         return out
 
     def _all_clip_dirs(self):
-        out = []
-        for root in self._clip_roots():
-            out.extend(d for d in glob.glob(os.path.join(root, "*")) if os.path.isdir(d))
-        return out
+        # Re-read every time: Settings > Game Recording can move the
+        # folder while we are running, and the next poll should simply
+        # find it.  See deckygram.steamcfg.
+        return list(steamcfg.clip_dirs(self.home))
 
     def seed_existing(self):
         """Mark everything currently on disk as already sent (first run).

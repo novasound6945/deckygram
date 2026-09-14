@@ -2,6 +2,39 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.6.1
+
+### Added / 추가
+
+- **Clips are found when the recordings folder has been moved.** Steam's
+  Settings > Game Recording can put recordings on an SD card, and it
+  moves the whole tree when you do - clips, timelines and the clip index
+  all follow. Only the default location under `userdata` was ever
+  looked at, so those clips were invisible. The configured folder is now
+  read from Steam's own settings, and the old location keeps being
+  watched too, because recordings made before the move stay where they
+  were. Screenshots are unaffected either way: that setting covers
+  recordings only.
+  **녹화 폴더를 옮겨도 클립을 찾습니다.** 스팀 설정 → 게임 녹화에서
+  녹화 위치를 SD카드로 지정할 수 있는데, 이때 클립·타임라인·클립 인덱스가
+  전부 함께 옮겨갑니다. 그동안 `userdata` 기본 위치만 봤기 때문에 그
+  클립들이 보이지 않았습니다. 이제 스팀 설정에서 지정된 폴더를 직접 읽고,
+  기존 위치도 계속 감시합니다. 옮기기 전에 녹화한 클립은 원래 자리에
+  남기 때문입니다. 스크린샷은 어느 쪽이든 영향이 없습니다. 그 설정은
+  녹화에만 적용됩니다.
+
+### Fixed / 수정
+
+- **A clip Steam failed to save is skipped instead of erroring.** When
+  saving a clip fails partway, Steam can leave the folder behind with a
+  readable manifest and an empty `init-stream0.m4s`. ffmpeg then refused
+  it once a minute, forever. Such a clip is now recognised as having no
+  usable video and set aside for good.
+  **스팀이 저장에 실패한 클립을 오류 대신 건너뜁니다.** 클립 저장이 중간에
+  실패하면 스팀이 폴더만 남기고 `init-stream0.m4s`를 빈 파일로 두는
+  경우가 있습니다. 그러면 ffmpeg가 1분마다 계속 거부했습니다. 이제 쓸 수
+  있는 영상이 없는 클립으로 판단해 한 번만 건너뜁니다.
+
 ## v0.6.0
 
 ### Added / 추가

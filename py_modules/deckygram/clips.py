@@ -39,6 +39,20 @@ INIT_RE = re.compile(r"^init-stream(\d+)\.m4s$")
 CHUNK_RE = re.compile(r"^chunk-stream(\d+)-(\d+)\.m4s$")
 
 
+def _usable(path: str) -> bool:
+    """A fragment that exists and has bytes in it.
+
+    Steam has been seen writing a zero-length `init-stream0.m4s`
+    (observed 2026-09-14): the folder looks complete, the manifest reads
+    fine, and ffmpeg then fails with "no tfhd was found" because the
+    track it describes is empty.
+    """
+    try:
+        return os.path.getsize(path) > 0
+    except OSError:
+        return False
+
+
 def streams(chunk_dir: str):
     """Track indexes present, ascending.  Steam writes 0=video, 1=audio."""
     found = []
@@ -69,16 +83,26 @@ def concat_spec(chunk_dir: str, index: int):
     """`concat:` input for one track, or None when it has no fragments."""
     init = os.path.join(chunk_dir, "init-stream%d.m4s" % index)
     parts = chunks(chunk_dir, index)
-    if not parts or not os.path.exists(init):
+    if not parts or not _usable(init):
         return None
     return "concat:" + "|".join([init] + parts)
 
 
 def ffmpeg_inputs(chunk_dir: str):
-    """One `concat:` input per track, video first - empty when unusable."""
+    """One `concat:` input per track, video first - empty when unusable.
+
+    The lowest-numbered track is the video, and without it there is
+    nothing worth sending: an audio-only export would be a worse answer
+    than none at all.  Steam leaves folders in exactly that shape when
+    an instant clip fails to persist.
+    """
+    indexes = streams(chunk_dir)
     specs = []
-    for index in streams(chunk_dir):
+    for index in indexes:
         spec = concat_spec(chunk_dir, index)
-        if spec:
-            specs.append(spec)
+        if spec is None:
+            if index == indexes[0]:
+                return []
+            continue
+        specs.append(spec)
     return specs

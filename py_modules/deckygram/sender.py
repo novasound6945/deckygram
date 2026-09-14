@@ -486,8 +486,12 @@ class Sender:
             # them to a single fragment.  See deckygram.clips.
             inputs = clips.ffmpeg_inputs(os.path.dirname(mpds[0]))
             if not inputs:
-                self.qs.clip_retry_at[clip_id] = time.time() + RETRY_SEC * 2
-                self.log("clip has no fragments to export: %s" % clip_id)
+                # Settled, has a manifest, and still no usable video:
+                # Steam failed to persist this one and left the shell
+                # behind. Retrying cannot fix it, so stop for good
+                # rather than reopening the folder every minute.
+                self._finish_clip(clip_dir, clip_id)
+                self.log("clip has no usable video, skipping: %s" % clip_id)
                 return
             cmd = ["ffmpeg", "-y", "-loglevel", "error"]
             for spec in inputs:

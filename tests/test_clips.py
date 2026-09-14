@@ -129,5 +129,44 @@ class TestFfmpegInputs(ClipDirTest):
             self.assertNotIn("session.mpd", spec)
 
 
+class TestEmptyInitSegment(ClipDirTest):
+    """Steam leaves these behind when an instant clip fails to persist.
+
+    Observed on a Steam Deck 2026-09-14: "Clip save failed with
+    Persistence Failed" in Steam's own log, and a zero-length
+    init-stream0.m4s in the folder it had already created.  The clip
+    looks complete and the manifest reads fine; only the byte count
+    gives it away.
+    """
+
+    def empty(self, name):
+        open(os.path.join(self.dir, name), "wb").close()
+
+    def test_empty_video_init_yields_no_inputs(self):
+        self.build()
+        self.empty("init-stream0.m4s")
+        self.assertEqual(clips.ffmpeg_inputs(self.dir), [])
+
+    def test_never_falls_back_to_audio_only(self):
+        # Sending the sound of a clip with no picture would be worse
+        # than not sending it.
+        self.build()
+        self.empty("init-stream0.m4s")
+        for spec in clips.ffmpeg_inputs(self.dir):
+            self.assertNotIn("stream1", spec)
+
+    def test_empty_audio_init_still_sends_the_video(self):
+        self.build()
+        self.empty("init-stream1.m4s")
+        got = clips.ffmpeg_inputs(self.dir)
+        self.assertEqual(len(got), 1)
+        self.assertIn("init-stream0.m4s", got[0])
+
+    def test_concat_spec_rejects_an_empty_init(self):
+        self.build(video=3, audio=0)
+        self.empty("init-stream0.m4s")
+        self.assertIsNone(clips.concat_spec(self.dir, 0))
+
+
 if __name__ == "__main__":
     unittest.main()
