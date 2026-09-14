@@ -38,16 +38,11 @@ SIZE_LIMIT = 10 * 1024 * 1024
 SIZE_TARGET = 9 * 1024 * 1024    # headroom for the multipart envelope
 MAX_FILES = 10                   # per message, matching our album size
 
-# A ninth of Telegram's budget, so the frame has to come down further than
-# the shared presets ask for: a minute here affords ~1.1 Mbit/s, which
-# 480p spends well and 800p would not.  The longest preset drops again,
-# because by then there is under half a megabit to go around.
-HEIGHT_CAP = {"quality": 480, "balanced": 480, "reach": 360}
-MAX_HEIGHT = 480
-
-
-def height_cap(preset_name) -> int:
-    return HEIGHT_CAP.get(preset_name or "balanced", MAX_HEIGHT)
+# A fifth of Telegram's budget, so unlike there the frame does have to
+# come down: a minute here affords ~1.1 Mbit/s, which 480p spends well
+# and a 1280x800 frame would only smear across more pixels.
+HEIGHT_CAP = 480
+MAX_HEIGHT = HEIGHT_CAP
 
 
 def valid_url(url: str) -> bool:

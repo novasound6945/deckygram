@@ -11,7 +11,7 @@ import os
 import decky
 from deckygram import destinations, discord, media, tg
 from deckygram.appname import AppNameResolver
-from deckygram import deletion, library
+from deckygram import deletion, library, steamcfg
 from deckygram import sender as sender_mod
 from deckygram.gallery import Gallery
 from deckygram.pairing import PairingServer
@@ -28,6 +28,11 @@ def _plugin_version() -> str:
             return json.load(f).get("version", "?")
     except Exception:
         return "?"
+
+# The worked example the settings panel shows: a minute is the length
+# people actually share, and it is long enough that the size limit has
+# something to say about the bitrate.
+ESTIMATE_SECONDS = 60
 
 DEFAULTS = {
     # Telegram is the default destination; Discord is opt-in and needs
@@ -46,9 +51,11 @@ DEFAULTS = {
     # Send notifications fire while a game is running, so the sound they
     # make is recorded along with it.  See Plugin._notify.
     "notify_silent": False,
-    # How much of the size budget to spend on quality vs length; the
-    # bitrate ceiling and frame height come from this (see media.PRESETS).
-    "clip_preset": "balanced",
+    # Two independent choices: how many bits a second of clip may spend
+    # (see media.BITRATES) and how many frames share them.  Settings
+    # written before these existed named a preset instead, which
+    # media.pick_bitrate translates.
+    "clip_bitrate": media.DEFAULT_BITRATE,
     "video_fps": 30,
     "delete_after_send": False,
 
@@ -500,6 +507,15 @@ class Plugin:
         st["configured"] = dest.configured()
         st["destination"] = s.get("destination", "telegram")
         st["max_clip_seconds"] = dest.max_clip_seconds()
+        # A worked example for the settings panel, so the bitrate and
+        # frame rate can be judged before a clip is sent rather than
+        # after. A minute is what people actually share.
+        st["estimate"] = dest.estimate(ESTIMATE_SECONDS)
+        st["size_limit_mb"] = round(dest.hard_limit() / 1024 / 1024)
+        # The other half of the question: how long Steam actually saves
+        # a clip for.  Advice can name the setting to change only if it
+        # knows what it is set to.
+        st["clip_seconds"] = steamcfg.clip_seconds(decky.DECKY_USER_HOME)
         st["enabled"] = s["enabled"]
         return st
 

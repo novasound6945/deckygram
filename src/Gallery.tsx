@@ -358,9 +358,9 @@ export function GalleryPage() {
     return next;
   });
 
-  const send = async () => {
+  const send = async (only?: MediaItem) => {
     setBusy(true);
-    const queued = [...picked];
+    const queued = only ? [only.id] : [...picked];
     const r = await gallerySend(queued).catch(() => ({ count: 0 }));
     setBusy(false);
     setPicked(new Set());
@@ -378,9 +378,9 @@ export function GalleryPage() {
   };
 
   /** Delete what is picked, once the user has said so twice. */
-  const runDelete = async () => {
+  const runDelete = async (only?: MediaItem) => {
     setBusy(true);
-    const ids = [...picked];
+    const ids = only ? [only.id] : [...picked];
     const r = await galleryDelete(ids).catch(() => ({
       deleted: 0, deferred: 0, gone: 0, failed: ids.length,
       deferred_ids: [] as string[],
@@ -473,6 +473,13 @@ export function GalleryPage() {
   /** The ☰ menu: everything you can do to a selection, in one place. */
   const showOptionsMenu = () => {
     const n = picked.size;
+    // Opening the menu over a tile is itself a way of pointing at it, so
+    // with nothing ticked the actions apply to whatever the cursor is
+    // on. Refusing to do anything until something is selected made the
+    // menu useless in the common case: one item, act on it.
+    const one = !n ? focused : null;
+    const canSend = (n > 0 || (!!one && one.sendable)) && !busy;
+    const canDelete = (n > 0 || !!one) && !busy;
     showContextMenu(
       <Menu label={t("gallery_options")}>
         {/* Whatever the cursor is on, or failing that the first pick -
@@ -483,11 +490,13 @@ export function GalleryPage() {
           {t("gallery_preview")}
         </MenuItem>
         <MenuSeparator />
-        <MenuItem disabled={!n || busy} onSelected={() => { void send(); }}>
-          {n ? t("gallery_send", { n }) : t("send_to_telegram")}
+        <MenuItem disabled={!canSend}
+          onSelected={() => { void send(one ?? undefined); }}>
+          {n ? t("gallery_send", { n }) : t("gallery_send", { n: 1 })}
         </MenuItem>
-        <MenuItem disabled={!n || busy} onSelected={confirmDelete}>
-          {n ? t("gallery_delete_n", { n }) : t("gallery_delete")}
+        <MenuItem disabled={!canDelete}
+          onSelected={() => confirmDelete(one ?? undefined)}>
+          {n ? t("gallery_delete_n", { n }) : t("gallery_delete_n", { n: 1 })}
         </MenuItem>
         <MenuSeparator />
         <MenuItem onSelected={() => { setGames(null); load(offset, kind, true, appids); }}>
@@ -497,15 +506,16 @@ export function GalleryPage() {
     );
   };
 
-  const confirmDelete = () => {
-    if (!picked.size) return;
+  const confirmDelete = (only?: MediaItem) => {
+    const n = only ? 1 : picked.size;
+    if (!n) return;
     showModal(
       <ConfirmModal
         bDestructiveWarning
         strTitle={t("gallery_delete_title")}
-        strDescription={t("gallery_delete_body", { n: picked.size })}
+        strDescription={t("gallery_delete_body", { n })}
         strOKButtonText={t("gallery_delete")}
-        onOK={() => { void runDelete(); }}
+        onOK={() => { void runDelete(only); }}
       />,
     );
   };
@@ -647,7 +657,7 @@ export function GalleryPage() {
             one has to be aimed at, and then confirmed. */}
         <DialogButton
           disabled={!picked.size || busy}
-          onClick={confirmDelete}
+          onClick={() => confirmDelete()}
           style={{ width: "auto", minWidth: 110, padding: "8px 14px" }}
         >
           {picked.size ? t("gallery_delete_n", { n: picked.size })

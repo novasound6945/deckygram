@@ -78,7 +78,8 @@ type Settings = {
   send_screenshots: boolean;
   photo_original: boolean;
   send_clips: boolean;
-  clip_preset: ClipPreset;
+  clip_bitrate: number;
+  video_fps: number;
   notify_on_send: boolean;
   notify_silent: boolean;
   delete_after_send: boolean;
@@ -101,6 +102,25 @@ type Status = {
   configured: boolean;
   destination: Destination;
   max_clip_seconds: number;
+  size_limit_mb: number;
+  // How long Steam saves a clip for; 0 when it could not be read.
+  clip_seconds: number;
+  // A worked example for the chosen bitrate and frame rate, so the two
+  // can be judged before a clip is sent. Computed in main.py so the UI
+  // and the encoder never disagree about the arithmetic.
+  estimate?: {
+    seconds: number;
+    // True when no ceiling was asked for, in which case there is no
+    // length to quote: how long a clip survives intact is decided by
+    // how heavy Steam recorded it, not by us.
+    source: boolean;
+    full_seconds?: number;
+    asked_mb?: number;
+    fits?: boolean;
+    bitrate: number;
+    mb?: number;
+    sendable: boolean;
+  };
   enabled: boolean;
   version: string;
   ffmpeg_ok: boolean;
@@ -111,8 +131,20 @@ type Status = {
   url: string;
 };
 
-const CLIP_PRESETS = ["quality", "balanced", "reach"] as const;
-type ClipPreset = (typeof CLIP_PRESETS)[number];
+// How many bits a second of clip may spend. The top of the range is what
+// a Deck records at, so picking it asks for the recording as it was made.
+// Kept in step with media.BITRATES.
+// -1 is "no ceiling of ours": send it as recorded and let only the size
+// limit reduce it. The rest match Steam's own recording ladder for a
+// Deck's screen, so each one is a value a recording can actually be at.
+// Kept in step with media.BITRATES.
+const SOURCE_BITRATE = -1;
+const CLIP_BITRATES = [SOURCE_BITRATE, 7_500_000, 6_000_000, 3_750_000] as const;
+// Steam records at whatever the game manages, capped by its own setting.
+// 30 is the safe default; 60 costs twice the frames.
+const CLIP_FPS = [30, 60] as const;
+
+const mbps = (bits: number) => String(+(bits / 1e6).toFixed(2));
 
 /** "6m 07s" / "73s" — the longest clip the current preset will take. */
 function humanMinutes(seconds: number): string {
@@ -672,10 +704,28 @@ function SetupWizard({ onDone, onCancel, settings }: {
 
 // ---- main panel ------------------------------------------------------------
 
+// Opening a dialog over the Quick Access panel tears the panel down, and
+// closing it builds a fresh one - which a dropdown does every time it is
+// used. Starting that rebuild from an empty state paints "Loading..."
+// first, and the row Steam wants to hand focus back to does not exist
+// yet, so the cursor lands on the first thing in the panel instead.
+// Recorded on a Deck: the panel went to the loading placeholder and came
+// back as five new sections, and focus ended up on the gallery button at
+// the top.
+//
+// Keeping the last answer outside the component lets a rebuild paint the
+// real panel immediately, with the same rows in the same places.
+let lastSettings: Settings | null = null;
+let lastStatus: Status | null = null;
+
 function Content() {
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [status, setStatus] = useState<Status | null>(null);
-  const [showWizard, setShowWizard] = useState(false);
+  const [settings, setSettingsState] = useState<Settings | null>(lastSettings);
+  const [status, setStatusState] = useState<Status | null>(lastStatus);
+  const [showWizard, setShowWizard] = useState(
+    lastStatus ? !lastStatus.configured : false);
+
+  const setSettings = (s: Settings) => { lastSettings = s; setSettingsState(s); };
+  const setStatus = (s: Status) => { lastStatus = s; setStatusState(s); };
   // Which destination's "forget" button is armed, if any.
   const [forgetArmed, setForgetArmed] = useState<Destination | null>(null);
   const [downloading, setDownloading] = useState(false);
@@ -691,7 +741,19 @@ function Content() {
 
   useEffect(() => {
     refresh();
-    const timer = setInterval(() => { getStatus().then(setStatus); }, 2000);
+    // Re-rendering the panel costs the gamepad its place. A dropdown
+    // opens a full-screen dialog and this poll fires underneath it, so
+    // by the time the dialog closes the row it came from has been
+    // rebuilt and focus lands back at the top of the panel. Most polls
+    // find nothing new, so only publish a status that actually changed.
+    // Most polls find nothing new, and re-rendering for nothing is worth
+    // avoiding on its own.
+    const timer = setInterval(async () => {
+      const next = await getStatus().catch(() => null);
+      if (!next) return;
+      if (lastStatus && JSON.stringify(lastStatus) === JSON.stringify(next)) return;
+      setStatus(next);
+    }, 2000);
     return () => clearInterval(timer);
   }, []);
 
@@ -810,18 +872,70 @@ function Content() {
           <ToggleField label={t("recorded_clips")} checked={settings.send_clips}
             onChange={(v) => patch({ send_clips: v })} />
         </PanelSectionRow>
+        {/* The two halves of one decision - how many bits a second, and
+            how many pictures share them - so they sit together with a
+            single explanation and a worked example underneath, rather
+            than a paragraph wedged between the controls. */}
         {settings.send_clips ? (
-          <PanelSectionRow>
-            <DropdownItem
-              label={t("clip_preset")}
-              description={t("clip_preset_desc", {
-                len: humanMinutes(status?.max_clip_seconds ?? 0),
-              })}
-              rgOptions={CLIP_PRESETS.map((p) => ({ data: p, label: t(`preset_${p}`) }))}
-              selectedOption={settings.clip_preset}
-              onChange={(o) => patch({ clip_preset: o.data as ClipPreset })}
-            />
-          </PanelSectionRow>
+          <>
+            <PanelSectionRow>
+              <DropdownItem
+                label={t("clip_bitrate")}
+                rgOptions={CLIP_BITRATES.map((b) => ({
+                  data: b,
+                  // No number on the first one: Steam picks the recording
+                  // bitrate from the game's resolution and the quality
+                  // setting, so any figure printed here would be a guess.
+                  label: b === SOURCE_BITRATE
+                    ? t("bitrate_source")
+                    : `${mbps(b)} Mbps`,
+                }))}
+                selectedOption={settings.clip_bitrate}
+                onChange={(o) => patch({ clip_bitrate: o.data as number })}
+              />
+            </PanelSectionRow>
+            <PanelSectionRow>
+              <DropdownItem
+                label={t("clip_fps")}
+                rgOptions={CLIP_FPS.map((f) => ({ data: f, label: `${f} fps` }))}
+                selectedOption={settings.video_fps >= 60 ? 60 : 30}
+                onChange={(o) => patch({ video_fps: o.data as number })}
+              />
+            </PanelSectionRow>
+            <PanelSectionRow>
+              <Field description={
+                `${t("clip_bitrate_desc", {
+                  len: humanMinutes(status?.max_clip_seconds ?? 0),
+                })} ${t("clip_fps_desc")}`
+              } />
+            </PanelSectionRow>
+            {/* What the choice buys, not what it forbids: a high
+                bitrate is the right answer for a short clip, so say how
+                long it lasts rather than that a minute would not fit. */}
+            {status?.estimate ? (
+              <PanelSectionRow>
+                <Field description={
+                  status.estimate.source
+                    ? t("estimate_source", { limit: status.size_limit_mb })
+                    : t("estimate_line", {
+                        full: status.estimate.full_seconds ?? 0,
+                        secs: status.estimate.seconds,
+                        mb: status.estimate.mb ?? 0,
+                      })
+                      // Advice only when there is something to act on,
+                      // and only when Steam's own length is known:
+                      // naming the setting to change beats telling
+                      // someone their pick is wrong.
+                      + (status.clip_seconds > (status.estimate.full_seconds ?? 0)
+                         ? " " + t("estimate_advise", {
+                             clip: status.clip_seconds,
+                             full: status.estimate.full_seconds ?? 0,
+                           })
+                         : "")
+                } />
+              </PanelSectionRow>
+            ) : null}
+          </>
         ) : null}
         <PanelSectionRow>
           <ToggleField label={t("notify_toggle")} checked={settings.notify_on_send}

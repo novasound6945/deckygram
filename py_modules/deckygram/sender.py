@@ -202,8 +202,6 @@ class Sender:
         return destinations.build(self.get_settings())
 
     def _send_file(self, path, caption):
-        s = self.get_settings()
-
         def prog(pct):
             self.status["progress"] = pct
 
@@ -211,11 +209,10 @@ class Sender:
             label = "Encoding" if name == "encoding" else "Sending"
             self.status["current"] = "%s: %s" % (label, caption)
 
-        # Bitrate and frame height come from the destination's preset;
-        # only the frame rate is a plain setting.
-        self.destination().send(path, caption,
-                                fps=int(s.get("video_fps", 30)),
-                                progress=prog, phase=phase)
+        # Bitrate, frame height and frame rate all come from the
+        # destination, which folds the preset and the fps setting
+        # together - see destinations.Destination.encode_args.
+        self.destination().send(path, caption, progress=prog, phase=phase)
 
     def process_file(self, path):
         forced = self.qs.is_forced(path)

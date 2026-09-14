@@ -22,28 +22,49 @@ class Destination:
     name = ""
 
     def __init__(self, settings: dict):
-        self.preset_name = settings.get("clip_preset") or media.DEFAULT_PRESET
-        self.preset = media.preset(self.preset_name)
+        # Two independent choices.  The bitrate is used exactly as
+        # picked - scaling it by the frame rate would make the label a
+        # lie - while the frame rate decides how many pictures those
+        # bits have to cover, and so when a clip stops being worth
+        # sending at all.
+        self.fps = int(settings.get("video_fps") or media.BASE_FPS)
+        self.bitrate = media.pick_bitrate(settings.get("clip_bitrate"),
+                                          settings.get("clip_preset"))
+        self.floor = media.floor_for(self.fps)
 
     def configured(self) -> bool:
         raise NotImplementedError
 
     def max_clip_seconds(self) -> int:
-        """Longest clip this destination will take under the chosen preset."""
-        return media.max_seconds(self.size_target(), self.preset["floor"])
+        """Longest clip worth sending here at the chosen frame rate."""
+        return media.max_seconds(self.size_target(), self.floor)
+
+    def max_height(self) -> int:
+        """Frame height cap - the Deck's own screen unless told otherwise."""
+        return media.DECK_HEIGHT
 
     def encode_args(self) -> dict:
-        """Bitrate ceiling / frame height the preset asks for."""
-        return {"bitrate": self.preset["ceiling"],
-                "maxh": self.preset["height"],
-                "floor": self.preset["floor"]}
+        """What the encoder is asked for: bits, frames, and a size cap."""
+        return {"bitrate": self.bitrate,
+                "maxh": self.max_height(),
+                "fps": self.fps,
+                "floor": self.floor}
+
+    def estimate(self, duration_sec: int = 60) -> dict:
+        """What a clip of this length would weigh here - see media.estimate."""
+        return media.estimate(self.size_target(), self.hard_limit(),
+                              duration_sec, self.bitrate, self.floor)
 
     def hopeless(self, duration_sec: int) -> bool:
         """True when a clip of this length cannot fit, however encoded."""
-        raise NotImplementedError
+        return media.hopeless(self.size_target(), duration_sec, self.floor)
 
     def size_target(self) -> int:
         """Roughly what an uploaded clip will weigh - used for queue estimates."""
+        raise NotImplementedError
+
+    def hard_limit(self) -> int:
+        """The size the destination will actually refuse past."""
         raise NotImplementedError
 
     def send(self, path, caption, **kw) -> None:
@@ -72,11 +93,11 @@ class Telegram(Destination):
     def configured(self):
         return bool(self.token and self.chat_id)
 
-    def hopeless(self, duration_sec):
-        return tg.hopeless(duration_sec, self.preset["floor"])
-
     def size_target(self):
         return tg.SIZE_TARGET
+
+    def hard_limit(self):
+        return tg.BOT_LIMIT
 
     def send(self, path, caption, **kw):
         kw.update(self.encode_args())
@@ -104,18 +125,18 @@ class Discord(Destination):
     def configured(self):
         return discord.valid_url(self.url)
 
-    def hopeless(self, duration_sec):
-        return discord.hopeless(duration_sec, self.preset["floor"])
-
     def size_target(self):
         return discord.SIZE_TARGET
 
-    def encode_args(self):
-        args = super().encode_args()
-        # A ninth of the budget: the frame has to come down further than
-        # the shared preset asks for.
-        args["maxh"] = min(args["maxh"], discord.height_cap(self.preset_name))
-        return args
+    def hard_limit(self):
+        return discord.SIZE_LIMIT
+
+    def max_height(self):
+        # Telegram sends a clip at the size it was recorded; here the
+        # budget is a fifth of that - a minute has about 1.1 Mbit/s to
+        # work with - and 1280x800 at that rate falls apart. Fewer
+        # pixels, each worth looking at.
+        return discord.HEIGHT_CAP
 
     def send(self, path, caption, **kw):
         kw.update(self.encode_args())

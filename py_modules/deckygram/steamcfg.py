@@ -24,6 +24,9 @@ import os
 import re
 
 RECORD_PATH_RE = re.compile(r'"BackgroundRecordPath"\s*"((?:[^"\\]|\\.)*)"')
+# How long a saved clip is, in seconds.  Sits in the same GameRecording
+# block and, unlike the path, is present on a stock install.
+CLIP_SECONDS_RE = re.compile(r'"InstantClipDuration"\s*"(\d+)"')
 
 
 def _unescape(value: str) -> str:
@@ -79,6 +82,25 @@ def recording_paths(home: str):
         if path and path not in out:
             out.append(path)
     return out
+
+
+def clip_seconds(home: str) -> int:
+    """How long Steam saves a clip for, or 0 when it cannot be read.
+
+    Worth knowing because it is the other half of the bitrate question:
+    a bitrate holds its quality for a certain number of seconds, and
+    whether that covers a clip depends entirely on this.  Advice is only
+    useful if it can name the setting to change.
+    """
+    for config in local_configs(home):
+        try:
+            with open(config, encoding="utf-8", errors="replace") as fh:
+                found = CLIP_SECONDS_RE.search(fh.read())
+        except OSError:
+            continue
+        if found:
+            return int(found.group(1))
+    return 0
 
 
 def recording_roots(home: str):
