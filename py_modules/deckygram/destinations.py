@@ -64,6 +64,10 @@ class Telegram(Destination):
         super().__init__(settings)
         self.token = settings.get("token") or ""
         self.chat_id = settings.get("chat_id") or ""
+        # Telegram re-encodes screenshots sent as photos; this asks for
+        # the file as taken instead.  Discord needs no such switch - a
+        # webhook upload is already the original bytes.
+        self.original_photos = bool(settings.get("photo_original"))
 
     def configured(self):
         return bool(self.token and self.chat_id)
@@ -76,10 +80,12 @@ class Telegram(Destination):
 
     def send(self, path, caption, **kw):
         kw.update(self.encode_args())
-        tg.send_media(self.token, self.chat_id, path, caption, **kw)
+        tg.send_media(self.token, self.chat_id, path, caption,
+                      original=self.original_photos, **kw)
 
     def send_album(self, paths, caption, **kw):
-        tg.send_photo_album(self.token, self.chat_id, paths, caption)
+        tg.send_photo_album(self.token, self.chat_id, paths, caption,
+                            original=self.original_photos)
 
     def test(self):
         tg.api_call(self.token, "sendMessage",

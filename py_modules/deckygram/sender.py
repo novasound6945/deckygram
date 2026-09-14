@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 import time
 
-from . import captions, destinations, media
+from . import captions, clips, destinations, media
 from .errors import SetupBroken, Uncertain, Unsendable
 
 SETTLE_SEC = 3          # wait after last write before sending
@@ -24,6 +24,11 @@ RETRY_SEC = 30          # backoff before retrying a failed send
 MAX_ATTEMPTS = 5        # give up (but keep the item) after this many tries
 RECHECK_SEC = 600       # re-test a broken setup this often
 CLIP_DELETE_GRACE = 8   # how long Steam gets to delete a clip itself
+# How far under the manifest's duration a remux may land before we call
+# it broken.  A good remux runs slightly LONG - the clip's window is not
+# fragment-aligned, so it carries up to one ~3 s fragment of padding at
+# each end - and never short.  See deckygram.clips.
+TRUNCATED_RATIO = 0.9
 
 
 class Sender:
@@ -391,8 +396,8 @@ class Sender:
         The manifest is a small XML file; a regex read is far cheaper than
         spawning ffprobe and this runs on every status poll.
         """
-        mpds = glob.glob(os.path.join(clip_dir, "**", "session.mpd"),
-                         recursive=True)
+        mpds = sorted(glob.glob(os.path.join(clip_dir, "**", "session.mpd"),
+                                recursive=True))
         if not mpds:
             return 0
         try:
@@ -400,6 +405,22 @@ class Sender:
         except OSError:
             return 0
         return captions.parse_mpd_duration(text)
+
+    def _remux_short(self, path, expected_sec):
+        """"3s of 60s" when a remux lost most of the clip, else "".
+
+        Exit code and file size both look healthy on a truncated remux -
+        this is the only thing that catches it, and the manifest has
+        already told us what to expect.  An unreadable duration reads as
+        fine: refusing to send on a failed probe would be worse than the
+        bug it guards against.
+        """
+        if expected_sec <= 0:
+            return ""
+        got = media.probe(path)[2]
+        if got and got < expected_sec * TRUNCATED_RATIO:
+            return "%ds of %ds" % (got, expected_sec)
+        return ""
 
     def process_clip(self, clip_dir):
         if not self.ffmpeg_ok:
@@ -430,7 +451,8 @@ class Sender:
             return
         if newest == 0 or time.time() - newest < CLIP_SETTLE_SEC:
             return  # still being written; next scan will retry
-        mpds = glob.glob(os.path.join(clip_dir, "**", "session.mpd"), recursive=True)
+        mpds = sorted(glob.glob(os.path.join(clip_dir, "**", "session.mpd"),
+                                recursive=True))
         if not mpds:
             self._finish_clip(clip_dir, clip_id)
             return
@@ -459,12 +481,28 @@ class Sender:
         self._in_flight.add(clip_dir)
         try:
             self.status["current"] = "Exporting clip: %s" % caption
-            r = subprocess.run(
-                ["ffmpeg", "-y", "-loglevel", "error", "-i", mpds[0],
-                 "-c", "copy", tmp.name],
-                capture_output=True, timeout=600, cwd=os.path.dirname(mpds[0]))
+            # Fragments are joined directly; the manifest is NOT handed to
+            # ffmpeg, because for background-recorded clips it truncates
+            # them to a single fragment.  See deckygram.clips.
+            inputs = clips.ffmpeg_inputs(os.path.dirname(mpds[0]))
+            if not inputs:
+                self.qs.clip_retry_at[clip_id] = time.time() + RETRY_SEC * 2
+                self.log("clip has no fragments to export: %s" % clip_id)
+                return
+            cmd = ["ffmpeg", "-y", "-loglevel", "error"]
+            for spec in inputs:
+                cmd += ["-i", spec]
+            r = subprocess.run(cmd + ["-c", "copy", tmp.name],
+                               capture_output=True, timeout=600)
             if r.returncode != 0 or os.path.getsize(tmp.name) == 0:
+                self.qs.clip_retry_at[clip_id] = time.time() + RETRY_SEC * 2
                 self.log("clip remux failed: %s" % clip_id)
+                return
+            short = self._remux_short(tmp.name, dur)
+            if short:
+                self.qs.clip_retry_at[clip_id] = time.time() + RETRY_SEC * 2
+                self.log("clip remux truncated, not sending (%s): %s"
+                         % (short, clip_id))
                 return
             self.status["current"] = "Encoding & sending: %s" % caption
             self._send_file(tmp.name, caption)

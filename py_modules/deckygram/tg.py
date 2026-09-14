@@ -26,6 +26,11 @@ _multipart = net.multipart
 
 BOT_LIMIT = 50 * 1024 * 1024
 SIZE_TARGET = 45 * 1024 * 1024   # leave headroom under the hard limit
+# sendPhoto re-encodes what it accepts and takes a fifth of what
+# sendDocument takes.  Sending a screenshot "as the original file" means
+# sendDocument - the same choice the Telegram app offers - and anything
+# past this cap has to go that way regardless.
+PHOTO_LIMIT = 10 * 1024 * 1024
 
 # Media handling is shared with the other destinations; these aliases keep
 # the long-standing tg.IMAGE_EXT / tg.VIDEO_EXT spellings working.
@@ -100,9 +105,27 @@ def api_call(token: str, method: str, fields: dict = None, files: dict = None,
 
 # ------------------------------------------------------------------- sending
 
+def photo_kind(paths, original: bool) -> str:
+    """"photo" (Telegram re-encodes) or "document" (the bytes as taken).
+
+    An album is all-or-nothing - Telegram will not mix the two in one
+    media group - so a single oversized shot moves the whole batch to
+    documents rather than failing it.
+    """
+    if original:
+        return "document"
+    for path in paths:
+        try:
+            if os.path.getsize(path) > PHOTO_LIMIT:
+                return "document"
+        except OSError:
+            pass
+    return "photo"
+
+
 def send_media(token: str, chat_id: str, path: str, caption: str,
                bitrate: int = 2_000_000, fps: int = 30, maxh: int = 600,
-               progress=None, phase=None,
+               progress=None, phase=None, original: bool = False,
                floor: int = media.MIN_BITRATE) -> None:
     """Send one file. Raises TelegramError (retryable) or Unsendable (skip)."""
     ext = os.path.splitext(path)[1].lower()
@@ -111,9 +134,14 @@ def send_media(token: str, chat_id: str, path: str, caption: str,
         if ext in IMAGE_EXT:
             if os.path.getsize(path) > BOT_LIMIT:
                 raise Unsendable("image over bot limit")
-            api_call(token, "sendPhoto",
-                     {"chat_id": chat_id, "caption": caption},
-                     {"photo": path})
+            if photo_kind([path], original) == "document":
+                api_call(token, "sendDocument",
+                         {"chat_id": chat_id, "caption": caption},
+                         {"document": path})
+            else:
+                api_call(token, "sendPhoto",
+                         {"chat_id": chat_id, "caption": caption},
+                         {"photo": path})
             return
 
         if ext in VIDEO_EXT:
@@ -148,7 +176,8 @@ def send_media(token: str, chat_id: str, path: str, caption: str,
                 pass
 
 
-def send_photo_album(token: str, chat_id: str, paths: list, caption: str) -> None:
+def send_photo_album(token: str, chat_id: str, paths: list, caption: str,
+                     original: bool = False) -> None:
     """Send up to 10 photos as ONE album (one notification on the phone).
 
     A screenshot burst would otherwise ping the phone once per shot.
@@ -159,14 +188,16 @@ def send_photo_album(token: str, chat_id: str, paths: list, caption: str) -> Non
     if not paths:
         return
     if len(paths) == 1:
-        send_media(token, chat_id, paths[0], caption)
+        send_media(token, chat_id, paths[0], caption, original=original)
         return
 
+    batch = paths[:10]
+    kind = photo_kind(batch, original)
     media = []
     files = {}
-    for i, p in enumerate(paths[:10]):
+    for i, p in enumerate(batch):
         name = "photo%d" % i
-        item = {"type": "photo", "media": "attach://" + name}
+        item = {"type": kind, "media": "attach://" + name}
         if i == 0:
             item["caption"] = caption
         media.append(item)

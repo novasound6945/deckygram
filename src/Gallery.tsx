@@ -5,7 +5,12 @@ import {
   Spinner,
   GamepadButton,
   ConfirmModal,
+  ModalRoot,
   showModal,
+  showContextMenu,
+  Menu,
+  MenuItem,
+  MenuSeparator,
 } from "@decky/ui";
 import {
   addEventListener, callable, removeEventListener, toaster,
@@ -142,9 +147,9 @@ const TILE_FOCUS_CSS = `
   z-index: 1;
 }`;
 
-function Tile({ item, thumb, picked, onToggle, pendingDelete }: {
+function Tile({ item, thumb, picked, onToggle, pendingDelete, onFocus }: {
   item: MediaItem; thumb?: string; picked: boolean; onToggle: () => void;
-  pendingDelete?: boolean;
+  pendingDelete?: boolean; onFocus?: () => void;
 }) {
   // Selectable even when it cannot be sent: a clip with no video in it is
   // precisely the kind of thing you want to delete, and the send path
@@ -153,6 +158,7 @@ function Tile({ item, thumb, picked, onToggle, pendingDelete }: {
     <Focusable
       className="dg-tile"
       onActivate={onToggle}
+      onFocus={onFocus}
       style={{
         width: "100%", borderRadius: 6, overflow: "hidden",
         background: "#1a2332",
@@ -258,6 +264,9 @@ export function GalleryPage() {
   const [gone, setGone] = useState<Set<string>>(new Set());
   // Asked to be deleted, but mid-send: it goes once the send lands.
   const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set());
+  // Whatever the cursor is on. Preview acts on this, not on the selection:
+  // you look at one thing, and it is the thing you are pointing at.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
 
   useEffect(() => {
     // The backend names what it deleted by its tail ("<appid>/screenshots/
@@ -372,8 +381,10 @@ export function GalleryPage() {
   const runDelete = async () => {
     setBusy(true);
     const ids = [...picked];
-    const r = await galleryDelete(ids).catch(
-      () => ({ deleted: 0, deferred: 0, gone: 0, failed: ids.length }));
+    const r = await galleryDelete(ids).catch(() => ({
+      deleted: 0, deferred: 0, gone: 0, failed: ids.length,
+      deferred_ids: [] as string[],
+    }));
     setBusy(false);
     setPicked(new Set());
     // Grey them out first: the deferred ones stay on the Deck until their
@@ -406,6 +417,86 @@ export function GalleryPage() {
     });
   };
 
+  /**
+   * Where Steam serves this item from inside its own UI.
+   *
+   * The media grid loads tiles from steamloopback.host, so the full-size
+   * file is one URL away - no round trip through the backend, and no
+   * base64 blob the size of a screenshot crossing it.
+   */
+  const steamUrl = (it: MediaItem) => {
+    const parts = it.id.replace(/\\/g, "/").split("/").filter(Boolean);
+    if (it.kind === "clip") {
+      return "https://steamloopback.host/gamerecordings/clips/"
+        + parts[parts.length - 1] + "/thumbnail.jpg";
+    }
+    return "https://steamloopback.host/screenshots/" + parts.slice(-3).join("/");
+  };
+
+  /** Show one item as large as the screen allows. */
+  const preview = (it: MediaItem) => {
+    showModal(
+      <ModalRoot bAllowFullSize>
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center",
+          gap: 10,
+        }}>
+          <img
+            src={steamUrl(it)}
+            style={{
+              maxWidth: "100%",
+              // Not a percentage of the viewport: the dialog's own frame
+              // and the SteamOS bar along the bottom stay about the same
+              // number of pixels whatever the UI scale, so a percentage
+              // overflows further the smaller the screen gets. Measured
+              // at 854x534 (scale 1.5), the bar hid the last 40px.
+              maxHeight: "calc(100vh - 210px)",
+              objectFit: "contain",
+              borderRadius: 6, background: "#0b0f17",
+            }}
+          />
+          <div style={{ fontSize: "0.85em", color: "#c6ccd4", textAlign: "center" }}>
+            {it.game}
+            {it.kind === "clip" && (
+              // A clip is DASH fragments on disk, not a file a video tag
+              // can open, so this is its thumbnail rather than playback.
+              <span style={{ color: "#8b929a" }}>
+                {" · " + clipLength(it.seconds) + " · " + t("gallery_preview_still")}
+              </span>
+            )}
+          </div>
+        </div>
+      </ModalRoot>,
+    );
+  };
+
+  /** The ☰ menu: everything you can do to a selection, in one place. */
+  const showOptionsMenu = () => {
+    const n = picked.size;
+    showContextMenu(
+      <Menu label={t("gallery_options")}>
+        {/* Whatever the cursor is on, or failing that the first pick -
+            you open a preview to look at one thing. */}
+        <MenuItem
+          disabled={!focused}
+          onSelected={() => { if (focused) preview(focused); }}>
+          {t("gallery_preview")}
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem disabled={!n || busy} onSelected={() => { void send(); }}>
+          {n ? t("gallery_send", { n }) : t("send_to_telegram")}
+        </MenuItem>
+        <MenuItem disabled={!n || busy} onSelected={confirmDelete}>
+          {n ? t("gallery_delete_n", { n }) : t("gallery_delete")}
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem onSelected={() => { setGames(null); load(offset, kind, true, appids); }}>
+          {t("refresh")}
+        </MenuItem>
+      </Menu>,
+    );
+  };
+
   const confirmDelete = () => {
     if (!picked.size) return;
     showModal(
@@ -418,6 +509,12 @@ export function GalleryPage() {
       />,
     );
   };
+
+  // What preview acts on: the tile under the cursor, or the first pick if
+  // the cursor has not landed on anything yet.
+  const focused = (page?.items ?? []).find((i) => i.id === focusedId)
+    ?? (page?.items ?? []).find((i) => picked.has(i.id))
+    ?? null;
 
   const total = page?.total ?? 0;
   const pageNo = Math.floor(offset / PAGE) + 1;
@@ -610,6 +707,12 @@ export function GalleryPage() {
             picked.size ? t("gallery_send", { n: picked.size }) : undefined}
           onOptionsButton={() => setPicked(new Set())}
           onOptionsActionDescription={picked.size ? t("gallery_clear_all") : undefined}
+          // Deleting sits behind the menu rather than on a button of its
+          // own. It still cannot happen by accident - menu, then the item,
+          // then the confirm - but it no longer means walking the cursor
+          // up past every tile to reach the header.
+          onMenuButton={() => showOptionsMenu()}
+          onMenuActionDescription={t("gallery_options")}
           // Bumpers page through the library without leaving the grid.
           onButtonDown={(e: any) => {
             const b = e?.detail?.button;
@@ -627,6 +730,7 @@ export function GalleryPage() {
         >
           {page.items.filter((it) => !isGone(it.id)).map((it) => (
             <Tile key={it.id}
+              onFocus={() => setFocusedId(it.id)}
               pendingDelete={pendingDelete.has(it.id)}
               item={{
                 ...it,

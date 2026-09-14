@@ -38,6 +38,9 @@ DEFAULTS = {
     "webhook_url": "",
     "enabled": False,
     "send_screenshots": True,
+    # Telegram only: send a screenshot as the file it is rather than as a
+    # photo, which Telegram re-encodes.  See tg.photo_kind.
+    "photo_original": False,
     "send_clips": True,
     "notify_on_send": True,
     # How much of the size budget to spend on quality vs length; the

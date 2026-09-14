@@ -107,5 +107,67 @@ class TestAlbum(SendTestCase):
         self.assertEqual(self.rec.calls, [])
 
 
+class TestOriginalPhotos(SendTestCase):
+    """sendPhoto re-encodes; sendDocument is how the original gets through."""
+
+    def setUp(self):
+        super().setUp()
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        super().tearDown()
+        self.tmp.cleanup()
+
+    def shot(self, name, size=128):
+        path = os.path.join(self.tmp.name, name)
+        with open(path, "wb") as f:
+            f.truncate(size)
+        return path
+
+    def test_original_sends_a_document(self):
+        tg.send_media("t", "1", self.shot("a.jpg"), "cap", original=True)
+        self.assertEqual(self.rec.method, "sendDocument")
+        self.assertIn("document", self.rec.files)
+
+    def test_compressed_is_still_the_default(self):
+        tg.send_media("t", "1", self.shot("a.jpg"), "cap")
+        self.assertEqual(self.rec.method, "sendPhoto")
+
+    def test_oversized_photo_goes_as_a_document_rather_than_failing(self):
+        # Over sendPhoto's cap but under sendDocument's: Telegram would
+        # have rejected this outright before.
+        big = self.shot("big.png", tg.PHOTO_LIMIT + 1)
+        tg.send_media("t", "1", big, "cap")
+        self.assertEqual(self.rec.method, "sendDocument")
+
+    def test_past_the_document_limit_is_still_unsendable(self):
+        with self.assertRaises(tg.Unsendable):
+            tg.send_media("t", "1", self.shot("huge.png", tg.BOT_LIMIT + 1),
+                          "cap", original=True)
+
+    def test_original_album_is_a_group_of_documents(self):
+        paths = [self.shot("%d.jpg" % i) for i in range(3)]
+        tg.send_photo_album("t", "1", paths, "cap", original=True)
+        media = json.loads(self.rec.fields["media"])
+        self.assertTrue(all(i["type"] == "document" for i in media))
+
+    def test_one_oversized_shot_moves_the_whole_album(self):
+        # A media group cannot mix the two types, so all of them switch.
+        paths = [self.shot("0.jpg"), self.shot("1.png", tg.PHOTO_LIMIT + 1)]
+        tg.send_photo_album("t", "1", paths, "cap")
+        media = json.loads(self.rec.fields["media"])
+        self.assertTrue(all(i["type"] == "document" for i in media))
+
+    def test_album_of_normal_shots_stays_photos(self):
+        paths = [self.shot("%d.jpg" % i) for i in range(3)]
+        tg.send_photo_album("t", "1", paths, "cap")
+        media = json.loads(self.rec.fields["media"])
+        self.assertTrue(all(i["type"] == "photo" for i in media))
+
+    def test_missing_files_do_not_force_documents(self):
+        # photo_kind stats paths; an unreadable one must not decide.
+        self.assertEqual(tg.photo_kind(["/nope/gone.jpg"], False), "photo")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -61,6 +61,8 @@ const en: Dict = {
   watching_folders: "Watching {n} folders",
   paused: "Paused",
   what_to_send: "What to send",
+  photo_original: "Send screenshots as files",
+  photo_original_desc: "Telegram re-encodes photos. Sending as a file keeps the original.",
   screenshots: "Screenshots",
   recorded_clips: "Recorded clips",
   notify_toggle: "Show a toast for each send",
@@ -173,6 +175,9 @@ const en: Dict = {
   gallery_delete_nothing: "Nothing to delete",
   gallery_pick_delete_only: "{n} cannot be sent (delete only)",
   gallery_delete_pending: "deleting after send",
+  gallery_options: "Options",
+  gallery_preview: "Preview",
+  gallery_preview_still: "thumbnail only",
   no_token: "no token",
 };
 
@@ -220,6 +225,8 @@ const ko: Dict = {
   watching_folders: "폴더 {n}곳 감시 중",
   paused: "일시정지됨",
   what_to_send: "보낼 항목",
+  photo_original: "스크린샷을 파일로 보내기",
+  photo_original_desc: "텔레그램은 사진으로 받으면 다시 압축합니다. 파일로 보내면 원본이 유지됩니다.",
   screenshots: "스크린샷",
   recorded_clips: "녹화 클립",
   notify_toggle: "전송 결과 알림 표시",
@@ -332,6 +339,9 @@ const ko: Dict = {
   gallery_delete_nothing: "삭제할 항목이 없습니다",
   gallery_pick_delete_only: "{n}개는 전송 불가 (삭제만 가능)",
   gallery_delete_pending: "전송 후 삭제 예정",
+  gallery_options: "옵션",
+  gallery_preview: "미리보기",
+  gallery_preview_still: "정지 화면",
   no_token: "토큰 없음",
 };
 
@@ -379,6 +389,8 @@ const de: Dict = {
   watching_folders: "{n} Ordner werden überwacht",
   paused: "Pausiert",
   what_to_send: "Was gesendet wird",
+  photo_original: "Screenshots als Datei senden",
+  photo_original_desc: "Telegram komprimiert Fotos neu. Als Datei bleibt das Original erhalten.",
   screenshots: "Screenshots",
   recorded_clips: "Aufgenommene Clips",
   notify_toggle: "Hinweis bei jedem Senden anzeigen",
@@ -491,6 +503,9 @@ const de: Dict = {
   gallery_delete_nothing: "Nichts zu löschen",
   gallery_pick_delete_only: "{n} nicht sendbar (nur löschbar)",
   gallery_delete_pending: "wird nach dem Senden gelöscht",
+  gallery_options: "Optionen",
+  gallery_preview: "Vorschau",
+  gallery_preview_still: "nur Standbild",
   no_token: "kein Token",
 };
 
@@ -538,6 +553,8 @@ const fr: Dict = {
   watching_folders: "{n} dossiers surveillés",
   paused: "En pause",
   what_to_send: "Que faut-il envoyer",
+  photo_original: "Envoyer les captures en fichier",
+  photo_original_desc: "Telegram recompresse les photos. En fichier, l'original est conservé.",
   screenshots: "Captures d'écran",
   recorded_clips: "Clips enregistrés",
   notify_toggle: "Afficher une notification à chaque envoi",
@@ -650,6 +667,9 @@ const fr: Dict = {
   gallery_delete_nothing: "Rien à supprimer",
   gallery_pick_delete_only: "{n} non envoyable(s) (suppression seule)",
   gallery_delete_pending: "supprimé après l'envoi",
+  gallery_options: "Options",
+  gallery_preview: "Aperçu",
+  gallery_preview_still: "image fixe seulement",
   no_token: "aucun jeton",
 };
 
@@ -697,6 +717,8 @@ const ru: Dict = {
   watching_folders: "Отслеживается папок: {n}",
   paused: "Приостановлено",
   what_to_send: "Что отправлять",
+  photo_original: "Отправлять скриншоты файлом",
+  photo_original_desc: "Telegram пережимает фото. Файлом оригинал сохраняется.",
   screenshots: "Скриншоты",
   recorded_clips: "Записанные клипы",
   notify_toggle: "Показывать уведомление о каждой отправке",
@@ -809,6 +831,9 @@ const ru: Dict = {
   gallery_delete_nothing: "Удалять нечего",
   gallery_pick_delete_only: "{n} нельзя отправить (только удалить)",
   gallery_delete_pending: "удалится после отправки",
+  gallery_options: "Опции",
+  gallery_preview: "Просмотр",
+  gallery_preview_still: "только кадр",
   no_token: "нет токена",
 };
 
@@ -856,6 +881,8 @@ const ptBr: Dict = {
   watching_folders: "Monitorando {n} pastas",
   paused: "Pausado",
   what_to_send: "O que enviar",
+  photo_original: "Enviar capturas como arquivo",
+  photo_original_desc: "O Telegram recomprime fotos. Como arquivo, o original é mantido.",
   screenshots: "Capturas de tela",
   recorded_clips: "Clipes gravados",
   notify_toggle: "Mostrar aviso a cada envio",
@@ -968,6 +995,9 @@ const ptBr: Dict = {
   gallery_delete_nothing: "Nada a excluir",
   gallery_pick_delete_only: "{n} não pode(m) ser enviado(s) (só excluir)",
   gallery_delete_pending: "será excluído após o envio",
+  gallery_options: "Opções",
+  gallery_preview: "Pré-visualizar",
+  gallery_preview_still: "somente imagem",
   no_token: "sem token",
 };
 
@@ -1015,6 +1045,8 @@ const pl: Dict = {
   watching_folders: "Obserwowane foldery: {n}",
   paused: "Wstrzymane",
   what_to_send: "Co wysyłać",
+  photo_original: "Wysyłaj zrzuty jako pliki",
+  photo_original_desc: "Telegram ponownie kompresuje zdjęcia. Jako plik oryginał zostaje zachowany.",
   screenshots: "Zrzuty ekranu",
   recorded_clips: "Nagrane klipy",
   notify_toggle: "Pokazuj powiadomienie przy każdej wysyłce",
@@ -1127,6 +1159,9 @@ const pl: Dict = {
   gallery_delete_nothing: "Nie ma czego usuwać",
   gallery_pick_delete_only: "{n} nie do wysłania (tylko usunięcie)",
   gallery_delete_pending: "usunięcie po wysłaniu",
+  gallery_options: "Opcje",
+  gallery_preview: "Podgląd",
+  gallery_preview_still: "tylko klatka",
   no_token: "brak tokenu",
 };
 
@@ -1174,6 +1209,8 @@ const tr: Dict = {
   watching_folders: "{n} klasör izleniyor",
   paused: "Duraklatıldı",
   what_to_send: "Ne gönderilsin",
+  photo_original: "Ekran görüntülerini dosya olarak gönder",
+  photo_original_desc: "Telegram fotoğrafları yeniden sıkıştırır. Dosya olarak özgün hâli korunur.",
   screenshots: "Ekran görüntüleri",
   recorded_clips: "Kaydedilen klipler",
   notify_toggle: "Her gönderimde bildirim göster",
@@ -1286,6 +1323,9 @@ const tr: Dict = {
   gallery_delete_nothing: "Silinecek bir şey yok",
   gallery_pick_delete_only: "{n} gönderilemez (yalnızca silinebilir)",
   gallery_delete_pending: "gönderimden sonra silinecek",
+  gallery_options: "Seçenekler",
+  gallery_preview: "Önizleme",
+  gallery_preview_still: "yalnızca kare",
   no_token: "jeton yok",
 };
 
@@ -1333,6 +1373,8 @@ const zhCn: Dict = {
   watching_folders: "正在监视 {n} 个文件夹",
   paused: "已暂停",
   what_to_send: "发送内容",
+  photo_original: "以文件形式发送截图",
+  photo_original_desc: "Telegram 会重新压缩照片。以文件发送可保留原图。",
   screenshots: "截图",
   recorded_clips: "录制的片段",
   notify_toggle: "每次发送时显示提示",
@@ -1445,6 +1487,9 @@ const zhCn: Dict = {
   gallery_delete_nothing: "没有需要删除的内容",
   gallery_pick_delete_only: "{n} 项无法发送（仅可删除）",
   gallery_delete_pending: "发送后删除",
+  gallery_options: "选项",
+  gallery_preview: "预览",
+  gallery_preview_still: "仅静态图",
   no_token: "无令牌",
 };
 
@@ -1492,6 +1537,8 @@ const zhTw: Dict = {
   watching_folders: "正在監看 {n} 個資料夾",
   paused: "已暫停",
   what_to_send: "要傳送的內容",
+  photo_original: "以檔案形式傳送螢幕擷圖",
+  photo_original_desc: "Telegram 會重新壓縮照片。以檔案傳送可保留原圖。",
   screenshots: "螢幕擷圖",
   recorded_clips: "錄製的片段",
   notify_toggle: "每次傳送時顯示提示",
@@ -1604,6 +1651,9 @@ const zhTw: Dict = {
   gallery_delete_nothing: "沒有需要刪除的內容",
   gallery_pick_delete_only: "{n} 項無法傳送（僅可刪除）",
   gallery_delete_pending: "傳送後刪除",
+  gallery_options: "選項",
+  gallery_preview: "預覽",
+  gallery_preview_still: "僅靜態圖",
   no_token: "無權杖",
 };
 

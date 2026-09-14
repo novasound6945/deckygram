@@ -105,8 +105,8 @@ class Gallery:
         background-recording timeline - no fragments of their own. The
         sender cannot export those, so the picker must not offer them.
         """
-        found = glob.glob(os.path.join(clip_dir, "**", "session.mpd"),
-                          recursive=True)
+        found = sorted(glob.glob(os.path.join(clip_dir, "**", "session.mpd"),
+                                 recursive=True))
         return found[0] if found else None
 
     def _clip_seconds(self, clip_dir: str) -> int:

@@ -2,6 +2,77 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.6.0
+
+### Added / 추가
+
+- **An options menu in the gallery, on the ☰ button.** Deleting had no
+  shortcut - you had to walk to a button. Pick what you want, press ☰,
+  and choose from there. The menu also carries the new preview.
+  **갤러리에 ☰ 버튼으로 여는 옵션 메뉴.** 삭제에 단축키가 없어 버튼까지
+  이동해야 했습니다. 항목을 고른 뒤 ☰를 누르면 거기서 바로 선택할 수
+  있습니다. 새로 추가된 미리보기도 이 메뉴에 있습니다.
+
+- **Preview, for looking at one item large.** Clips show their still
+  frame; playback and trimming are where this is headed. The window
+  sizes itself to the screen, so it is not cut off at the bottom on a
+  Deck's own resolution.
+  **항목 하나를 크게 보는 미리보기.** 클립은 정지 화면으로 보여줍니다.
+  재생과 편집이 다음 목표입니다. 창이 화면 크기에 맞춰지므로 덱 해상도
+  에서 아래가 잘리지 않습니다.
+
+- **A picked item that cannot be sent now shows a red ✕, not a blue ✓,**
+  and an item waiting to be deleted after its upload says so. Selecting
+  something unsendable looked exactly like selecting something sendable.
+  **전송할 수 없는 항목을 고르면 파란 ✓ 대신 빨간 ✕가 표시되고,**
+  전송 후 삭제를 기다리는 항목은 그 사실을 알려줍니다. 전에는 전송
+  가능한 것을 고른 것과 구분이 되지 않았습니다.
+
+- **Send screenshots as files, keeping the original.** Telegram re-encodes
+  anything sent as a photo, so a screenshot arrived as a JPEG built from
+  your PNG. The new toggle sends it as a file instead - the same choice
+  the Telegram app offers - and the bytes arrive untouched. Off by
+  default, because a photo still previews inline in the chat and a file
+  does not. Discord has no such switch: a webhook upload was always the
+  original. A screenshot too large for Telegram's photo endpoint now goes
+  as a file rather than being rejected.
+  **스크린샷을 원본 파일로 보내는 선택지.** 텔레그램은 사진으로 받은
+  것을 다시 인코딩하기 때문에, PNG로 찍은 스크린샷이 JPEG로 도착했습니다.
+  새 옵션을 켜면 파일로 보내 원본 그대로 도착합니다. 텔레그램 앱의 "파일로
+  보내기"와 같습니다. 기본값은 꺼짐입니다. 사진으로 보내야 대화창에서
+  바로 보이기 때문입니다. 디스코드는 웹훅 업로드가 원래부터 원본이라 이
+  옵션이 없습니다. 텔레그램 사진 한도를 넘는 큰 스크린샷도 이제 거절되지
+  않고 파일로 전송됩니다.
+
+### Fixed / 수정
+
+- **A clip could arrive three seconds long.** Clips were exported by
+  handing Steam's `session.mpd` manifest to ffmpeg. A clip that covers
+  only part of a recording session carries its offset into that
+  session's timeline - `<Period start="PT27.739S">` - and ffmpeg honours
+  it by writing a single fragment: three seconds, exit code 0, a
+  perfectly valid file, so nothing downstream could tell. Background
+  recording hits this constantly, since a rolling buffer is always
+  longer than the slice you keep, but it is the slicing that does it and
+  not the mode: a manual recording trimmed to a window breaks the same
+  way. Fragments are now joined directly and the manifest is read only
+  for its duration - which is then checked against the exported file, so
+  a truncated export can never be sent again. Verified across 74 clips
+  on a Steam Deck: the three affected (two background, one manual) went
+  from 3 s to their full length, the other 71 were unchanged.
+  **클립이 3초짜리로 도착하던 문제.** 클립을 내보낼 때 스팀의
+  `session.mpd` 매니페스트를 ffmpeg에 넘겼는데, 녹화 세션의 일부만
+  잘라낸 클립에는 세션 타임라인상의 시작 오프셋
+  (`<Period start="PT27.739S">`)이 들어 있습니다. ffmpeg가 이를 존중해
+  조각 하나만 기록했고, 결과물이 3초짜리 정상 파일이라 이후 어디에서도
+  걸러지지 않았습니다. 백그라운드 녹화는 버퍼가 늘 잘라낸 구간보다 길어
+  거의 항상 해당되지만, 원인은 녹화 모드가 아니라 잘라냄 자체입니다.
+  수동 녹화도 구간을 잘라내면 똑같이 깨집니다. 이제 조각을 직접
+  이어붙이고 매니페스트는 길이를 읽는 데만 쓰며, 그 길이를 결과물과
+  대조하므로 짧게 잘린 클립은 전송되지 않습니다. 스팀덱에서 클립 74개로
+  검증했습니다. 해당 3개(백그라운드 2, 수동 1)는 3초에서 원래 길이로
+  복구됐고 나머지 71개는 그대로입니다.
+
 ## v0.5.1
 
 ### Fixed / 수정

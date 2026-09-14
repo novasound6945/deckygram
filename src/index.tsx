@@ -76,6 +76,7 @@ type Settings = {
   chat_id: string;
   enabled: boolean;
   send_screenshots: boolean;
+  photo_original: boolean;
   send_clips: boolean;
   clip_preset: ClipPreset;
   notify_on_send: boolean;
@@ -793,6 +794,17 @@ function Content() {
           <ToggleField label={t("screenshots")} checked={settings.send_screenshots}
             onChange={(v) => patch({ send_screenshots: v })} />
         </PanelSectionRow>
+        {/* A Discord webhook upload is already the original bytes, so
+            the choice only means something on Telegram. */}
+        {settings.send_screenshots && !onDiscord ? (
+          <PanelSectionRow>
+            <ToggleField
+              label={t("photo_original")}
+              description={t("photo_original_desc")}
+              checked={settings.photo_original}
+              onChange={(v) => patch({ photo_original: v })} />
+          </PanelSectionRow>
+        ) : null}
         <PanelSectionRow>
           <ToggleField label={t("recorded_clips")} checked={settings.send_clips}
             onChange={(v) => patch({ send_clips: v })} />
