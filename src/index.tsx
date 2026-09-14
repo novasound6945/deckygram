@@ -80,6 +80,7 @@ type Settings = {
   send_clips: boolean;
   clip_preset: ClipPreset;
   notify_on_send: boolean;
+  notify_silent: boolean;
   delete_after_send: boolean;
 };
 
@@ -826,6 +827,15 @@ function Content() {
           <ToggleField label={t("notify_toggle")} checked={settings.notify_on_send}
             onChange={(v) => patch({ notify_on_send: v })} />
         </PanelSectionRow>
+        {settings.notify_on_send ? (
+          <PanelSectionRow>
+            <ToggleField
+              label={t("notify_silent")}
+              description={t("notify_silent_desc")}
+              checked={settings.notify_silent}
+              onChange={(v) => patch({ notify_silent: v })} />
+          </PanelSectionRow>
+        ) : null}
         <PanelSectionRow>
           <ToggleField
             label={t("delete_after")}
@@ -1003,9 +1013,11 @@ export default definePlugin(() => {
     }, 30_000);
   };
 
-  const listener = addEventListener<[kind: string, title: string, body: string]>(
+  const listener = addEventListener<
+    [kind: string, title: string, body: string, silent?: boolean]
+  >(
     "deckygram_event",
-    (kind, title, body) => {
+    (kind, title, body, silent) => {
       // Not a message for the user: the backend is handing us the id of a
       // clip it just removed so Steam can be told to drop it too.
       if (kind === "clip_delete") {
@@ -1016,7 +1028,9 @@ export default definePlugin(() => {
         serialised(() => deleteScreenshotViaSteam(title));
         return;
       }
-      toaster.toast({ title, body });
+      // Silent still means visible - the toast is the point, its chime
+      // is what ends up in a recording.
+      toaster.toast({ title, body, playSound: !silent });
       if (kind === "sent") sweepSoon();
     },
   );

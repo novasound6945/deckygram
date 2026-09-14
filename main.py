@@ -43,6 +43,9 @@ DEFAULTS = {
     "photo_original": False,
     "send_clips": True,
     "notify_on_send": True,
+    # Send notifications fire while a game is running, so the sound they
+    # make is recorded along with it.  See Plugin._notify.
+    "notify_silent": False,
     # How much of the size budget to spend on quality vs length; the
     # bitrate ceiling and frame height come from this (see media.PRESETS).
     "clip_preset": "balanced",
@@ -503,9 +506,16 @@ class Plugin:
     # ------------------------------------------------------------ lifecycle
 
     def _notify(self, kind: str, title: str, body: str) -> None:
+        # These land while a game is running, so the toast's sound goes
+        # into whatever is being recorded.  Whether to play it is decided
+        # here rather than in the UI, because this is where the settings
+        # already are.  Steam's own interface sounds are a separate thing
+        # and belong to Settings > Audio > Enable UI Sounds.
+        silent = bool(self._load().get("notify_silent"))
         try:
             asyncio.run_coroutine_threadsafe(
-                decky.emit("deckygram_event", kind, title, body), self.loop)
+                decky.emit("deckygram_event", kind, title, body, silent),
+                self.loop)
         except Exception:
             pass
 

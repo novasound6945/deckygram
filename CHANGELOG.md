@@ -2,6 +2,22 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.6.2
+
+### Added / 추가
+
+- **Silent notifications.** Sends happen while you are playing, and with
+  background recording on, that means the notification chime lands in
+  whatever is being recorded. The toast still appears - seeing that a
+  clip went out is the useful part - it just makes no sound. Steam's own
+  interface sounds are separate and stay where they belong, under
+  Settings > Audio > Enable UI Sounds.
+  **알림 소리 끄기.** 전송은 게임하는 도중에 일어나고, 백그라운드 녹화가
+  켜져 있으면 그 알림음이 녹화 영상에 그대로 들어갑니다. 토스트는 그대로
+  표시됩니다. 클립이 나갔다는 걸 보는 건 유용하니까요. 소리만 나지
+  않습니다. 스팀 자체 UI 사운드는 별개이며 설정 → 오디오 → UI 사운드
+  사용에서 끕니다.
+
 ## v0.6.1
 
 ### Added / 추가
