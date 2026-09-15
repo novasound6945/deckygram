@@ -20,6 +20,8 @@ import os
 import subprocess
 import tempfile
 
+from . import proc
+
 from .errors import Unsendable
 
 # Where compression temp files go.  The host (main.py) points this at the
@@ -64,14 +66,12 @@ AUDIO_BITRATE = 128_000     # generous bound for the 96k AAC track + container
 MIN_BITRATE = 400_000       # below this the video is not worth watching
 
 # How many bits a clip may spend per second, offered as a plain number
-# rather than a word.  The top of the range is what a Steam Deck records
-# at (measured: 12.8 Mbit/s at 1280x800), so picking it asks for the
-# recording as it was made; the rest trade that away for length.
+# rather than a word.  Nothing here promises the clip will get it: a size
+# limit divided by a duration is a hard ceiling of its own and the lower
+# of the two wins, so at 45 MB a minute cannot exceed ~6.2 Mbit/s
+# whatever is chosen.  The UI says so before the choice is made - see
+# estimate().
 #
-# Nothing here promises the clip will get it.  A size limit divided by a
-# duration is a hard ceiling of its own, and the lower of the two wins -
-# at 45 MB a minute cannot exceed ~6.2 Mbit/s whatever is chosen here.
-# The UI says so before the choice is made: see estimate().
 # No ceiling of our own: whatever quality Steam is set to record at is
 # what gets sent, and only the size limit reduces it.  Named rather than
 # numbered because the number is not ours to state - Steam derives it
@@ -225,7 +225,7 @@ def source_fps(path: str) -> float:
     what this reading exists to prevent.
     """
     try:
-        out = subprocess.run(
+        out = proc.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=avg_frame_rate",
              "-of", "default=nw=1:nk=1", path],
@@ -239,7 +239,7 @@ def probe(path: str):
     """Return (width, height, duration_sec) - zeros when unknown."""
     def run(args):
         try:
-            out = subprocess.run(["ffprobe", "-v", "error"] + args,
+            out = proc.run(["ffprobe", "-v", "error"] + args,
                                  capture_output=True, text=True, timeout=30)
             return out.stdout.strip()
         except Exception:
@@ -270,11 +270,11 @@ def _run_ffmpeg(cmd, duration: int, progress=None) -> bool:
     (microseconds of output written); against the known source duration
     that yields a live percentage.
     """
-    proc = None
+    child = None
     try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL, text=True)
-        for line in proc.stdout:
+        child = proc.popen(cmd, stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, text=True)
+        for line in child.stdout:
             if not progress or duration <= 0:
                 continue
             key, _, val = line.strip().partition("=")
@@ -286,12 +286,12 @@ def _run_ffmpeg(cmd, duration: int, progress=None) -> bool:
                     pass
             if us is not None and us >= 0:
                 progress(min(99, int(us / (duration * 1_000_000) * 100)))
-        proc.wait(timeout=1800)
-        return proc.returncode == 0
+        child.wait(timeout=1800)
+        return child.returncode == 0
     except Exception:
-        if proc is not None:
+        if child is not None:
             try:
-                proc.kill()
+                child.kill()
             except Exception:
                 pass
         return False

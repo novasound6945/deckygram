@@ -2,6 +2,44 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.7.2
+
+### Fixed / 수정
+
+- Clips were broken on Decky Loader v3.2.9 even though the plugin
+  loaded: no thumbnails in the gallery, and no clip could be exported or
+  sent. Decky's loader is packed with PyInstaller, which points
+  `LD_LIBRARY_PATH` at its own unpacked libraries, and every ffmpeg we
+  started inherited it - loading Decky's older libstdc++ instead of the
+  one it was built against. External commands now run with the system
+  environment restored.
+  Decky Loader v3.2.9에서 플러그인은 로드되지만 클립이 동작하지 않던
+  문제. 갤러리 썸네일이 뜨지 않고 클립을 내보내거나 전송할 수도
+  없었습니다. Decky 로더는 PyInstaller로 묶여 있어 `LD_LIBRARY_PATH`가
+  자기 라이브러리를 가리키는데, 우리가 띄우는 ffmpeg가 그걸 물려받아
+  시스템 라이브러리 대신 Decky의 낡은 libstdc++를 집었습니다. 이제 외부
+  명령은 시스템 환경으로 되돌려 실행합니다.
+
+- Silent notifications were never silent. `playSound: false` is dropped
+  on the way to Steam, which picks the sound from a table keyed on the
+  notification type rather than from anything a plugin passes, so the
+  toast rang whatever the setting said. It borrows a type registered as
+  silent now, and looks exactly the same.
+  무음 알림이 실제로는 무음이 아니었습니다. `playSound: false`는 스팀으로
+  전달되는 과정에서 버려지고, 스팀은 플러그인이 넘긴 값이 아니라 알림
+  종류별 표를 보고 소리를 정합니다. 설정과 무관하게 소리가 났습니다. 이제
+  소리 없는 종류를 사용하며, 토스트 모양은 그대로입니다.
+
+### Changed / 변경
+
+- Clip tiles use the thumbnail Steam already writes beside each clip
+  instead of decoding a frame, which is four times quicker and gives a
+  tile to clips whose fragments are unusable. A poster that cannot be
+  made now says why in the log rather than leaving a blank tile.
+  클립 타일이 프레임을 디코딩하는 대신 스팀이 클립마다 만들어 두는
+  썸네일을 씁니다. 4배 빠르고, 조각이 깨진 클립도 타일이 생깁니다.
+  포스터를 만들지 못하면 빈 타일로 두지 않고 이유를 로그에 남깁니다.
+
 ## v0.7.1
 
 ### Fixed / 수정

@@ -1154,9 +1154,19 @@ export default definePlugin(() => {
         serialised(() => deleteScreenshotViaSteam(title));
         return;
       }
-      // Silent still means visible - the toast is the point, its chime
-      // is what ends up in a recording.
-      toaster.toast({ title, body, playSound: !silent });
+      // Silent still means visible: the toast is the point, its chime is
+      // what ends up in a recording.
+      //
+      // playSound alone does nothing. Decky drops it on the way to Steam,
+      // and Steam decides from a hardcoded table keyed on eType rather
+      // than from anything we pass - so the way to a quiet toast is to
+      // borrow an eType registered as silent (40, Steam Input action
+      // sets). sound: 0 covers the other branch that reads it.
+      // Verified by ear on a Deck; playSound: false and sound: -1 both
+      // rang. https://gist.github.com/mdeguzis/7bef2731edd67a6dea06ffc622a1bae6
+      toaster.toast(silent
+        ? { title, body, eType: 40, sound: 0, playSound: false }
+        : { title, body });
       if (kind === "sent") sweepSoon();
     },
   );

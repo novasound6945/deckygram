@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 import time
 
-from . import captions, clips, destinations, media
+from . import captions, clips, destinations, media, proc
 from .errors import SetupBroken, Uncertain, Unsendable
 
 SETTLE_SEC = 3          # wait after last write before sending
@@ -493,7 +493,7 @@ class Sender:
             cmd = ["ffmpeg", "-y", "-loglevel", "error"]
             for spec in inputs:
                 cmd += ["-i", spec]
-            r = subprocess.run(cmd + ["-c", "copy", tmp.name],
+            r = proc.run(cmd + ["-c", "copy", tmp.name],
                                capture_output=True, timeout=600)
             if r.returncode != 0 or os.path.getsize(tmp.name) == 0:
                 self.qs.clip_retry_at[clip_id] = time.time() + RETRY_SEC * 2
