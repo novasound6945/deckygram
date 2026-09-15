@@ -355,7 +355,7 @@ def prepare_video(path: str, hard_limit: int, size_target: int, bitrate: int,
     Raises Unsendable when the file cannot be brought under the limit.
     """
     size = os.path.getsize(path)
-    _, _, dur = probe(path)
+    _, height, dur = probe(path)
 
     # Never ask for more frames than were recorded.  The fps filter would
     # duplicate them and the encoder would spend real bits doing it -
@@ -376,14 +376,29 @@ def prepare_video(path: str, hard_limit: int, size_target: int, bitrate: int,
         return path, None
 
     src_br = size * 8 // dur
-    target = fit_bitrate(size_target, dur, bitrate)
+    budget = fit_bitrate(size_target, dur, bitrate)
 
-    # Already light enough (within 15 % of the cap): send as-is.
-    if size <= hard_limit and src_br <= target * 115 // 100:
+    # Already light enough (within 15 % of the cap): send as-is - unless
+    # it is taller than asked for.  Skipping the encode also skipped the
+    # scale, so a clip that happened to fit went out at its recorded
+    # size however small a frame had been chosen, and choosing 480p did
+    # nothing at all (reported 2026-09-16: "renders at maximum
+    # resolution").
+    too_tall = bool(maxh) and height > maxh
+    if size <= hard_limit and src_br <= budget * 115 // 100 and not too_tall:
         return path, None
 
-    if target < floor:
+    # The floor is about the budget, not the recording: it refuses a
+    # video so long that fitting it would leave nothing worth watching.
+    if budget < floor:
         raise Unsendable("video too long to fit at watchable quality")
+
+    # Re-encoding cannot put back detail the recording never had, so a
+    # target above the source rate only buys a bigger file.  Short clips
+    # hit this: a 14 s clip has room for 26 Mbit/s inside the size limit,
+    # and writing 480p at that rate came out larger than the 14 Mbit/s
+    # original.
+    target = min(budget, src_br) if src_br > 0 else budget
 
     tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False, dir=TMP_DIR)
     tmp.close()
@@ -397,7 +412,7 @@ def prepare_video(path: str, hard_limit: int, size_target: int, bitrate: int,
     if new == 0 or new > hard_limit:
         os.unlink(tmp.name)
         raise Unsendable("compressed output still over the limit")
-    if new >= size and size <= hard_limit:
+    if new >= size and size <= hard_limit and not too_tall:
         os.unlink(tmp.name)     # compression did not help; keep the original
         return path, None
     return tmp.name, tmp.name

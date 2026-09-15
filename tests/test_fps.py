@@ -222,14 +222,14 @@ class TestALighterRecordingIsLeftAlone(unittest.TestCase):
         media.source_fps = self.real_fps
         media._encode = self.real_encode
 
-    def run_with(self, megabytes, seconds, bitrate):
+    def run_with(self, megabytes, seconds, bitrate, maxh=0):
         media.probe = lambda p: (1280, 800, seconds)
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as fh:
             fh.write(b"y" * int(megabytes * 1024 * 1024))
             src = fh.name
         try:
             out, tmp = media.prepare_video(
-                src, tg.BOT_LIMIT, tg.SIZE_TARGET, bitrate, 30, 0,
+                src, tg.BOT_LIMIT, tg.SIZE_TARGET, bitrate, 30, maxh,
                 floor=media.FLOOR)
             if tmp:
                 os.unlink(tmp)
@@ -250,6 +250,98 @@ class TestALighterRecordingIsLeftAlone(unittest.TestCase):
         # ~33 Mbit/s: past the ceiling and past the limit.
         self.assertFalse(self.run_with(40, 10, 12_800_000))
         self.assertTrue(self.encoded)
+
+    def test_a_taller_frame_is_encoded_even_when_it_would_fit(self):
+        # Passing a light clip straight through skipped the scale too,
+        # so asking for 480p did nothing whenever the clip happened to
+        # fit - which, on "as recorded", is most of them.
+        self.assertFalse(self.run_with(1, 10, media.SOURCE, maxh=480))
+        self.assertTrue(self.encoded)
+
+    def test_a_frame_already_within_the_cap_still_passes_through(self):
+        self.assertTrue(self.run_with(1, 10, media.SOURCE, maxh=800))
+        self.assertFalse(self.encoded)
+
+    def test_no_cap_means_no_reason_to_encode(self):
+        self.assertTrue(self.run_with(1, 10, media.SOURCE, maxh=0))
+        self.assertFalse(self.encoded)
+
+
+class TestScalingSurvivesAnUnhelpfulEncode(unittest.TestCase):
+    """A smaller frame must still be delivered smaller.
+
+    Measured on a Deck: a 14 s 23.9 MB clip at "as recorded" + 480p came
+    back 1280x800.  The scale did run, but the encode was aimed at the
+    26 Mbit/s the size limit allowed rather than the 14 Mbit/s the clip
+    actually had, so the output grew and the "compression did not help"
+    fallback handed the original back - 480p once again doing nothing.
+    """
+
+    def setUp(self):
+        self.real_probe = media.probe
+        self.real_fps = media.source_fps
+        self.real_encode = media._encode
+        self.asked = {}
+
+        def fake_encode(src, dst, bitrate, fps, maxh, progress=None):
+            # Writes what it was told to: the bug only shows when the
+            # encoder is taken at its word.
+            self.asked["bitrate"] = bitrate
+            with open(dst, "wb") as fh:
+                fh.write(b"x" * (bitrate * 14 // 8))
+            return True
+
+        media.probe = lambda p: (1280, 800, 14)
+        media.source_fps = lambda p: 30.0
+        media._encode = fake_encode
+
+    def tearDown(self):
+        media.probe = self.real_probe
+        media.source_fps = self.real_fps
+        media._encode = self.real_encode
+
+    def prepare(self, maxh):
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as fh:
+            fh.write(b"y" * (14_000_000 * 14 // 8))     # 14 Mbit/s, 14 s
+            src = fh.name
+        try:
+            out, tmp = media.prepare_video(
+                src, tg.BOT_LIMIT, tg.SIZE_TARGET, media.SOURCE, 30, maxh,
+                floor=media.FLOOR)
+            if tmp:
+                os.unlink(tmp)
+            return out == src
+        finally:
+            os.unlink(src)
+
+    def test_the_shrunken_frame_is_the_one_sent(self):
+        self.assertFalse(self.prepare(480))
+
+    def test_the_encode_is_never_aimed_above_the_source(self):
+        self.prepare(480)
+        self.assertLessEqual(self.asked["bitrate"], 14_000_000)
+
+    def test_a_frame_within_the_cap_is_still_left_alone(self):
+        self.assertTrue(self.prepare(800))
+
+    def test_a_recording_lighter_than_the_floor_is_not_refused(self):
+        # A 6 s 0.25 MB clip is ~350 kbit/s, under the 400 kbit/s floor
+        # on its own.  Capping the target at the source rate must not
+        # turn that into "too long to fit at watchable quality" - the
+        # floor guards the size budget, and this clip needs none of it.
+        media.probe = lambda p: (1280, 800, 6)
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as fh:
+            fh.write(b"y" * 262_144)
+            src = fh.name
+        try:
+            out, tmp = media.prepare_video(
+                src, tg.BOT_LIMIT, tg.SIZE_TARGET, media.SOURCE, 30, 480,
+                floor=media.FLOOR)
+            if tmp:
+                os.unlink(tmp)
+            self.assertNotEqual(out, src)
+        finally:
+            os.unlink(src)
 
 
 class TestNeverInventFrames(unittest.TestCase):

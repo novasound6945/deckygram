@@ -2,6 +2,44 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.7.3
+
+### Fixed / 수정
+
+- The resolution cap did nothing. A clip small enough to send skipped
+  the encode, and the scale went with it, so 480p went out at the
+  recorded size. Forcing the encode then hit a second problem: with the
+  bitrate on "as recorded" the encode was aimed at whatever the size
+  limit allowed - 26 Mbit/s for a short clip - so the smaller frame came
+  out larger than the original and was thrown away for it. The encode is
+  now capped at the source rate and the scaled file is the one sent.
+  해상도 상한이 동작하지 않았습니다. 전송 가능한 크기의 클립은 인코딩을
+  건너뛰는데 그때 크기 조정도 같이 건너뛰어서, 480p를 골라도 녹화된 크기
+  그대로 나갔습니다. 인코딩을 강제하니 두 번째 문제가 드러났습니다.
+  비트레이트가 '원본 그대로'면 용량 제한이 허용하는 값(짧은 클립은
+  26 Mbit/s)을 목표로 잡아서, 작아진 화면이 원본보다 커지고 그 이유로
+  버려졌습니다. 이제 원본 비트레이트를 넘지 않게 잡고, 크기를 조정한
+  파일을 전송합니다.
+
+### Changed / 변경
+
+- The gallery list is five times quicker to open. It no longer walks
+  every file in the recording folders to date them - the folder's own
+  timestamp does - and reads each clip's length only for the rows on
+  screen. Game names are resolved once per request instead of once per
+  item. Measured on a Deck with 60 items: 124 ms to 25 ms.
+  갤러리 목록이 5배 빠르게 열립니다. 날짜를 알아내려고 녹화 폴더의 모든
+  파일을 훑지 않고 폴더 자체의 시각을 쓰며, 클립 길이는 화면에 보이는
+  항목만 읽습니다. 게임 이름은 항목마다가 아니라 요청당 한 번 조회합니다.
+  60개 기준 덱에서 124 ms → 25 ms.
+
+### Thanks / 감사
+
+- **@EslamBradwil** reported both of these and shared a build with their
+  own fix for the gallery, which this release builds on. Thank you.
+  두 문제 모두 **@EslamBradwil**님이 알려주셨고, 갤러리는 직접 고친 빌드를
+  공유해 주셔서 그 방식을 가져왔습니다. 감사합니다.
+
 ## v0.7.2
 
 ### Fixed / 수정
