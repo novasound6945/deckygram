@@ -136,6 +136,17 @@ class Watcher:
 
     # ------------------------------------------------------------- UI surface
 
+    def _clip_bytes(self, clip_dir) -> int:
+        """What the recording weighs on disk, fragments and all."""
+        total = 0
+        for root, _, files in os.walk(clip_dir):
+            for f in files:
+                try:
+                    total += os.path.getsize(os.path.join(root, f))
+                except OSError:
+                    pass
+        return total
+
     def queue_info(self):
         """What is waiting to go out, split by kind, with sizes.
 
@@ -165,15 +176,26 @@ class Watcher:
 
         dest = self.sender.destination()
         vbr = dest.encode_args()["bitrate"]
+        target = dest.size_target()
         clip_n = clip_b = 0
         for d in self._all_clip_dirs():
             if os.path.basename(d) in self.qs.clips_done:
                 continue
             clip_n += 1
             dur = self.sender.clip_duration(d)
-            if dur > 0:
-                est = dur * (vbr + 96_000) // 8
-                clip_b += min(est, dest.size_target())
+            if dur <= 0:
+                continue
+            # The rate this clip will actually be encoded at, which is
+            # the chosen ceiling or the size limit, whichever is lower.
+            # Reading the setting straight would be wrong: "as recorded"
+            # is a sentinel, not a bitrate.
+            fit = media.fit_bitrate(target, dur, vbr)
+            est = dur * (fit + media.AUDIO_BITRATE) // 8
+            if vbr <= 0:
+                # No ceiling of ours, so the recording is what goes out
+                # - and a light one weighs less than the budget allows.
+                est = min(est, self._clip_bytes(d))
+            clip_b += min(est, target)
 
         result = {
             "queued": img_n + clip_n,

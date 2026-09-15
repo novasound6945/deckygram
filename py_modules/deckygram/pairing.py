@@ -12,7 +12,6 @@ network and is stored with mode 600 on the Deck.
 """
 
 import html
-import http.server
 import secrets
 import socket
 import threading
@@ -22,6 +21,55 @@ import urllib.parse
 from . import tg
 
 TIMEOUT_SEC = 600
+MAX_HEADER = 64 * 1024   # a pairing request is tiny; anything larger is junk
+MAX_BODY = 64 * 1024
+
+# Spoken over a socket rather than through http.server, which is not
+# always there: Decky's prerelease loader ships a trimmed Python and
+# importing it took the whole plugin down with ModuleNotFoundError
+# (reported 2026-09-15).  What this needs of HTTP is one GET, one POST
+# and a Content-Length, so the dependency was not worth the risk.
+
+
+def _read_request(conn):
+    """(method, path, body) from one request, or None if unusable."""
+    data = b""
+    while b"\r\n\r\n" not in data:
+        chunk = conn.recv(4096)
+        if not chunk or len(data) > MAX_HEADER:
+            return None
+        data += chunk
+    head, _, rest = data.partition(b"\r\n\r\n")
+    lines = head.decode("latin-1", "replace").split("\r\n")
+    try:
+        method, path, _ = lines[0].split(" ", 2)
+    except ValueError:
+        return None
+    length = 0
+    for line in lines[1:]:
+        key, _, value = line.partition(":")
+        if key.strip().lower() == "content-length":
+            try:
+                length = min(int(value.strip()), MAX_BODY)
+            except ValueError:
+                length = 0
+    body = rest
+    while len(body) < length:
+        chunk = conn.recv(4096)
+        if not chunk:
+            break
+        body += chunk
+    return method, path, body[:length]
+
+
+def _send(conn, code, body_html):
+    data = _PAGE.format(body=body_html).encode("utf-8")
+    head = ("HTTP/1.1 %d %s\r\n"
+            "Content-Type: text/html; charset=utf-8\r\n"
+            "Content-Length: %d\r\n"
+            "Connection: close\r\n\r\n"
+            % (code, "OK" if code == 200 else "Not Found", len(data)))
+    conn.sendall(head.encode("latin-1") + data)
 
 _PAGE = """<!doctype html>
 <html><head><meta charset="utf-8">
@@ -151,7 +199,7 @@ class PairingServer:
         self.on_token = on_token          # callback(token) -> bot_username (or raise)
         self.on_webhook = on_webhook      # callback(url) -> None (or raise)
         self.log = log or (lambda *a: None)
-        self._httpd = None
+        self._sock = None
         self._thread = None
         self.state = {"status": "idle", "url": "", "bot_username": "",
                       "mode": "telegram", "error": ""}
@@ -162,79 +210,78 @@ class PairingServer:
         outer = self
         discord_mode = mode == "discord"
 
-        class Handler(http.server.BaseHTTPRequestHandler):
-            def _reply(self, code, html):
-                data = _PAGE.format(body=html).encode("utf-8")
-                self.send_response(code)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-
-            def do_GET(self):
-                if self.path.rstrip("/") != "/" + nonce:
-                    self._reply(404, "<h2>Not found</h2>")
-                    return
-                form = _FORM_DISCORD if discord_mode else _FORM
-                self._reply(200, form.format(extra=""))
-
-            def do_POST(self):
-                if self.path.rstrip("/") != "/" + nonce:
-                    self._reply(404, "<h2>Not found</h2>")
-                    return
-                length = int(self.headers.get("Content-Length", 0) or 0)
-                form = urllib.parse.parse_qs(
-                    self.rfile.read(length).decode("utf-8", "replace"))
-                if discord_mode:
-                    self._accept_webhook((form.get("webhook") or [""])[0].strip())
-                else:
-                    self._accept_token((form.get("token") or [""])[0].strip())
-
-            def _accept_token(self, token):
-                try:
-                    bot = outer.on_token(token)
-                except Exception as e:
-                    self._reply(200, _FORM.format(
-                        extra='<p class="err">Invalid token / 잘못된 토큰: %s</p>'
-                              % html.escape(str(e))))
-                    return
-                outer.state.update(status="done", bot_username=bot)
-                self._reply(200, _DONE.format(bot=bot))
-                threading.Thread(target=outer.stop, daemon=True).start()
-
-            def _accept_webhook(self, url):
-                try:
-                    outer.on_webhook(url)
-                except Exception as e:
-                    self._reply(200, _FORM_DISCORD.format(
-                        extra='<p class="err">Could not use that webhook / '
-                              '웹훅을 사용할 수 없습니다: %s</p>'
-                              % html.escape(str(e))))
-                    return
+        def handle(conn):
+            """One request, one reply, connection closed."""
+            req = _read_request(conn)
+            if not req:
+                return
+            method, path, body = req
+            if path.split("?")[0].rstrip("/") != "/" + nonce:
+                _send(conn, 404, "<h2>Not found</h2>")
+                return
+            form = _FORM_DISCORD if discord_mode else _FORM
+            if method != "POST":
+                _send(conn, 200, form.format(extra=""))
+                return
+            fields = urllib.parse.parse_qs(body.decode("utf-8", "replace"))
+            if discord_mode:
+                secret = (fields.get("webhook") or [""])[0].strip()
+                accept, label = outer.on_webhook, "webhook"
+            else:
+                secret = (fields.get("token") or [""])[0].strip()
+                accept, label = outer.on_token, "token"
+            try:
+                result = accept(secret)
+            except Exception as e:
+                note = ('<p class="err">Invalid token / 잘못된 토큰: %s</p>'
+                        if label == "token" else
+                        '<p class="err">Could not use that webhook / '
+                        '웹훅을 사용할 수 없습니다: %s</p>') % html.escape(str(e))
+                _send(conn, 200, form.format(extra=note))
+                return
+            if discord_mode:
                 outer.state.update(status="done", bot_username="")
-                self._reply(200, _DONE_DISCORD)
-                threading.Thread(target=outer.stop, daemon=True).start()
+                _send(conn, 200, _DONE_DISCORD)
+            else:
+                outer.state.update(status="done", bot_username=result)
+                _send(conn, 200, _DONE.format(bot=result))
 
-            def log_message(self, *args):
-                pass
-
-        self._httpd = http.server.ThreadingHTTPServer(("0.0.0.0", 0), Handler)
-        port = self._httpd.server_address[1]
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("0.0.0.0", 0))
+        sock.listen(8)
+        sock.settimeout(1)
+        self._sock = sock
+        port = sock.getsockname()[1]
         url = "http://%s:%d/%s" % (_lan_ip(), port, nonce)
         self.state = {"status": "waiting", "url": url, "bot_username": "",
                       "mode": mode, "error": ""}
 
         def serve():
             deadline = time.time() + TIMEOUT_SEC
-            self._httpd.timeout = 5
-            while self._httpd and time.time() < deadline \
+            while self._sock is sock and time.time() < deadline \
                     and self.state["status"] == "waiting":
                 try:
-                    self._httpd.handle_request()
-                except Exception:
+                    conn, _ = sock.accept()
+                except socket.timeout:
+                    continue
+                except OSError:
                     break
+                try:
+                    # A phone on a flaky network must not hold the one
+                    # socket open forever; the next request can wait.
+                    conn.settimeout(15)
+                    handle(conn)
+                except Exception as e:
+                    self.log("pairing request failed: %r" % (e,))
+                finally:
+                    try:
+                        conn.close()
+                    except OSError:
+                        pass
             if self.state["status"] == "waiting":
                 self.state["status"] = "expired"
+            self.stop()
             self.log("pairing server stopped (%s)" % self.state["status"])
 
         self._thread = threading.Thread(target=serve, daemon=True)
@@ -243,9 +290,9 @@ class PairingServer:
         return dict(self.state)
 
     def stop(self):
-        httpd, self._httpd = self._httpd, None
-        if httpd:
+        sock, self._sock = self._sock, None
+        if sock:
             try:
-                httpd.server_close()
-            except Exception:
+                sock.close()
+            except OSError:
                 pass

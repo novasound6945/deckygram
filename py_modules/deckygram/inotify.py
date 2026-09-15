@@ -5,12 +5,21 @@ so the syscalls are called straight from libc.  If inotify cannot be set
 up at all the watcher falls back to pure polling (Inotify.active False).
 """
 
-import ctypes
-import ctypes.util
 import os
 import select
 import struct
 import time
+
+# A trimmed Python may not carry ctypes, and one missing import at the
+# top of a module takes the whole plugin down with it - which is exactly
+# what http.server did on Decky's prerelease loader (2026-09-15).
+# Polling is already the fallback for an inotify that will not start, so
+# an absent module simply lands in the same place.
+try:
+    import ctypes
+    import ctypes.util
+except ImportError:                      # pragma: no cover - runtime dependent
+    ctypes = None
 
 IN_CLOSE_WRITE = 0x00000008
 IN_MOVED_TO = 0x00000080
@@ -36,6 +45,8 @@ class Inotify:
         self._wd_to_dir = {}
         self._fd = None
         try:
+            if ctypes is None:
+                raise OSError("ctypes is not available in this Python")
             libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6",
                                use_errno=True)
             fd = libc.inotify_init()
@@ -46,6 +57,11 @@ class Inotify:
                 self.log("inotify_init failed; falling back to polling only")
         except Exception as e:
             self.log("inotify unavailable (%s); polling only" % e)
+
+    @property
+    def active(self) -> bool:
+        """False when watching failed and the caller is polling alone."""
+        return self._fd is not None
 
     @property
     def watched(self) -> int:

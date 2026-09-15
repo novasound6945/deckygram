@@ -79,6 +79,7 @@ type Settings = {
   photo_original: boolean;
   send_clips: boolean;
   clip_bitrate: number;
+  clip_height: number;
   video_fps: number;
   notify_on_send: boolean;
   notify_silent: boolean;
@@ -143,6 +144,9 @@ const CLIP_BITRATES = [SOURCE_BITRATE, 7_500_000, 6_000_000, 3_750_000] as const
 // Steam records at whatever the game manages, capped by its own setting.
 // 30 is the safe default; 60 costs twice the frames.
 const CLIP_FPS = [30, 60] as const;
+// A ceiling, not a target - a clip recorded smaller is left alone.
+// Kept in step with media.HEIGHTS.
+const CLIP_HEIGHTS = [800, 720, 600, 480] as const;
 
 const mbps = (bits: number) => String(+(bits / 1e6).toFixed(2));
 
@@ -883,15 +887,23 @@ function Content() {
                 label={t("clip_bitrate")}
                 rgOptions={CLIP_BITRATES.map((b) => ({
                   data: b,
-                  // No number on the first one: Steam picks the recording
-                  // bitrate from the game's resolution and the quality
-                  // setting, so any figure printed here would be a guess.
+                  // No number on the first one: it is whatever Steam is
+                  // set to record at, which it derives from the game's
+                  // resolution and the chosen recording quality.
                   label: b === SOURCE_BITRATE
                     ? t("bitrate_source")
                     : `${mbps(b)} Mbps`,
                 }))}
                 selectedOption={settings.clip_bitrate}
                 onChange={(o) => patch({ clip_bitrate: o.data as number })}
+              />
+            </PanelSectionRow>
+            <PanelSectionRow>
+              <DropdownItem
+                label={t("clip_height")}
+                rgOptions={CLIP_HEIGHTS.map((h) => ({ data: h, label: `${h}p` }))}
+                selectedOption={settings.clip_height}
+                onChange={(o) => patch({ clip_height: o.data as number })}
               />
             </PanelSectionRow>
             <PanelSectionRow>
@@ -906,7 +918,7 @@ function Content() {
               <Field description={
                 `${t("clip_bitrate_desc", {
                   len: humanMinutes(status?.max_clip_seconds ?? 0),
-                })} ${t("clip_fps_desc")}`
+                })} ${t("clip_height_desc")} ${t("clip_fps_desc")}`
               } />
             </PanelSectionRow>
             {/* What the choice buys, not what it forbids: a high

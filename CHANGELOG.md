@@ -2,113 +2,70 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.7.1
+
+### Fixed / 수정
+
+- **Decky Loader v3.2.9 compatibility - update to this if you have
+  updated Decky.** The plugin imported `http.server`, which that build
+  no longer ships, so it failed to start at all. The pairing page is
+  served over a plain socket now and needs no such module. inotify also
+  falls back to polling if `ctypes` is ever missing, rather than taking
+  the plugin down with it.
+  **Decky Loader v3.2.9 대응 — Decky를 업데이트했다면 이 버전으로
+  올리세요.** `http.server`를 가져다 썼는데 해당 빌드에는 들어 있지 않아
+  플러그인이 아예 시작되지 않았습니다. 이제 페어링 페이지를 소켓으로
+  직접 제공해 그 모듈이 필요 없습니다. `ctypes`가 없는 경우에도 inotify가
+  폴링으로 내려갈 뿐 플러그인을 죽이지 않습니다.
+
+- The queue said a minute of video weighed under a megabyte when the
+  bitrate was set to "as recorded".
+  비트레이트가 "원본 그대로"일 때 1분짜리 영상이 1MB 미만으로 표시되던
+  문제.
+
+### Added / 추가
+
+- A resolution ceiling: 800p, 720p, 600p or 480p. Lower is often the
+  better trade for something watched on a phone.
+  해상도 상한 선택(800p / 720p / 600p / 480p). 폰으로 볼 영상이라면
+  낮추는 쪽이 대체로 이득입니다.
+
 ## v0.7.0
 
 ### Changed / 변경
 
-- **Clip quality is a bitrate and a frame rate now, with what it costs
-  shown before you choose.** The old quality/balanced/reach presets hid
-  the only figures that decide anything behind words. Two dropdowns sit
-  together - as recorded, 7.5, 6 or 3.75 Mbps, and 30 or 60 fps - with
-  one explanation and a worked example underneath: how long the choice
-  holds, and what a 60-second clip would weigh. The numbers are Steam's
-  own: it picks a recording bitrate from the game's resolution and the
-  quality setting, which on a Deck's screen is 12, 7.5, 5.6 or 3.75
-  Mbit/s, so each option here is a value a recording can actually be at.
-  6 Mbps is the default because it is about all a minute can use on
-  Telegram. Existing settings carry over: quality becomes "as recorded",
-  balanced 6 Mbps, reach 3.75.
-  **클립 화질이 비트레이트와 프레임 수로 바뀌고, 고르기 전에 비용이
-  보입니다.** 기존 화질/균형/길이 프리셋은 정작 중요한 숫자를 단어 뒤에
-  숨기고 있었습니다. 드롭다운 두 개가 나란히 놓이고(원본 그대로 / 7.5 /
-  6 / 3.75 Mbps, 그리고 30 / 60 fps), 그 아래에 설명 하나와 실제 계산이
-  붙습니다. 고른 값이 몇 초까지 유지되는지, 60초 클립이면 몇 MB가 되는지
-  보여줍니다. 숫자는 스팀의 것을 따랐습니다. 스팀은 게임 해상도와 품질
-  설정으로 녹화 비트레이트를 정하는데 덱 화면에서는 12 / 7.5 / 5.6 /
-  3.75 Mbps이므로, 여기 있는 값은 전부 실제 녹화가 가질 수 있는 값입니다.
-  기본값은 6 Mbps입니다. 1분 클립이 텔레그램에서 쓸 수 있는 양이 딱
-  그만큼이기 때문입니다. 기존 설정은 이어집니다. 화질은 "원본 그대로",
-  균형은 6 Mbps, 길이는 3.75가 됩니다.
+- Clip quality is a bitrate and a frame rate now, instead of
+  quality/balanced/reach. Pick from as recorded / 7.5 / 6 / 3.75 Mbps
+  and 30 / 60 fps; the panel shows how long the choice holds and what a
+  60-second clip weighs. Old settings map to as recorded / 6 / 3.75.
+  클립 화질이 프리셋 대신 비트레이트와 프레임 수가 됐습니다. 원본 그대로
+  / 7.5 / 6 / 3.75 Mbps, 30 / 60 fps 중에서 고르면 몇 초까지 유지되는지,
+  60초 클립이 몇 MB인지 표시됩니다. 기존 설정은 각각 원본 그대로 / 6 /
+  3.75로 이어집니다.
 
-- **"As recorded" carries no number, because any number would be a
-  guess.** Steam's recording bitrate depends on settings we do not
-  choose, so that option simply applies no ceiling of ours: the clip
-  goes out as it was recorded and only the size limit reduces it. This
-  is not new behaviour - a recording lighter than the chosen ceiling was
-  always sent untouched - it is only now named honestly.
-  **"원본 그대로"에는 숫자를 적지 않습니다. 어떤 숫자를 적어도 추측이기
-  때문입니다.** 스팀의 녹화 비트레이트는 우리가 정하지 않는 설정에
-  달려 있으므로, 이 선택지는 우리 쪽 상한을 아예 걸지 않습니다. 클립은
-  녹화된 그대로 나가고 용량 한도만이 줄입니다. 새로 생긴 동작은
-  아닙니다. 고른 상한보다 가벼운 녹화는 원래도 손대지 않고 보냈습니다.
-  이제 그 사실을 정직하게 이름 붙였을 뿐입니다.
-
-- **Clips are sent at the Deck's own resolution at most.** Handheld that
-  changes nothing, since that is what a Deck records. Plugged into a
-  monitor the same game records at 1080p or more, and those extra pixels
-  would only thin out the same bitrate - so the frame comes down rather
-  than the picture. Not offered as a choice: there is one right answer
-  and no reason to make anyone think about it.
-  **클립은 최대 덱 화면 해상도로 전송됩니다.** 휴대 모드에서는 아무것도
-  달라지지 않습니다. 덱이 녹화하는 크기가 그대로이기 때문입니다. 모니터에
-  연결하면 같은 게임이 1080p 이상으로 녹화되는데, 늘어난 픽셀은 같은
-  비트레이트를 묽게 만들 뿐입니다. 그래서 화면을 줄입니다. 선택지로 두지
-  않았습니다. 정답이 하나뿐인 항목으로 고민을 늘릴 이유가 없습니다.
+- Clips are capped at 800p, the Deck's own height. Only docked
+  recordings are affected.
+  클립을 덱 화면 높이인 800p로 제한합니다. 독에 연결해 녹화한 경우에만
+  영향이 있습니다.
 
 ### Added / 추가
 
-- **Send clips at 60 fps.** Clips were always re-encoded down to 30 and
-  nothing said so - the setting existed in the backend but never
-  appeared. Measured on a Deck with a real 60 fps recording: a
-  63-second clip came out 23.3 MB at 30 fps and 45.6 MB at 60, both at
-  the full 1280x800. Twice the frames cost twice the bits, so the
-  longest clip that still fits gets shorter, and the panel quotes the
-  new figure.
-  **클립을 60fps로 전송.** 그동안 클립은 항상 30fps로 낮춰 인코딩됐고 그
-  사실을 알리지도 않았습니다. 설정은 백엔드에 있었지만 화면에 한 번도
-  나온 적이 없었습니다. 스팀덱에서 실제 60fps 녹화로 측정한 결과, 63초
-  클립이 30fps에서 23.3MB, 60fps에서 45.6MB로 나왔고 둘 다 1280x800을
-  유지했습니다. 프레임이 두 배면 비트도 두 배가 들므로 보낼 수 있는 최대
-  길이는 짧아지며, 패널에 바뀐 값이 표시됩니다.
+- 60 fps clips.
+  60fps 전송.
 
-- **The gallery's options menu acts on what the cursor is on.** Opening
-  it over a tile is itself a way of pointing at that tile, but sending
-  and deleting stayed greyed out until something was ticked, which made
-  the menu useless in the common case: one item, act on it.
-  **갤러리 옵션 메뉴가 커서 위의 항목에 동작합니다.** 타일 위에서 메뉴를
-  여는 것 자체가 그 항목을 가리키는 행위인데, 선택을 하기 전까지는 전송과
-  삭제가 비활성이었습니다. 하나만 고르면 되는 가장 흔한 경우에 메뉴가
-  쓸모없었습니다.
+- The gallery's options menu acts on the tile under the cursor when
+  nothing is selected.
+  갤러리 옵션 메뉴가, 선택한 항목이 없으면 커서 위의 항목에 동작합니다.
 
 ### Fixed / 수정
 
-- **The cursor jumped to the top of the panel after using a dropdown.**
-  Opening one tears the Quick Access panel down and closing it builds a
-  fresh one, and the rebuild started from an empty state - so it painted
-  a loading placeholder first and the row Steam wanted to hand focus
-  back to did not exist yet. The last answer is now kept across that
-  teardown, so the rebuild paints the real panel at once, with the same
-  rows in the same places.
-  **드롭다운을 쓰고 나면 커서가 패널 맨 위로 튀던 문제.** 드롭다운을 열면
-  퀵액세스 패널이 통째로 사라졌다가 닫힐 때 새로 만들어지는데, 그 재생성이
-  빈 상태에서 시작해 "불러오는 중" 화면을 먼저 그렸습니다. 스팀이 포커스를
-  되돌리려는 행이 그 순간 존재하지 않았습니다. 이제 마지막 상태를 유지해
-  재생성이 곧바로 진짜 패널을 그리므로, 같은 행이 같은 자리에 있습니다.
+- The cursor no longer jumps to the top of the panel after using a
+  dropdown.
+  드롭다운을 쓴 뒤 커서가 패널 맨 위로 튀지 않습니다.
 
-- Asking for more frames than were recorded no longer duplicates them.
-  A 30 fps recording sent at 60 used to be padded out with copies the
-  encoder then paid real bits for - 44.8 MB against 25.2 MB for a file
-  that looked identical. The source rate is read from `avg_frame_rate`,
-  not `r_frame_rate`: the latter is the lowest rate that can express
-  every timestamp, so jitter doubles it, and one Steam clip reported 120
-  while carrying 554 frames across 18.5 seconds.
-  녹화된 것보다 높은 프레임을 요구해도 프레임을 복제하지 않습니다.
-  30fps 녹화를 60fps로 보내면 복제 프레임이 채워지고 인코더가 거기에
-  실제 비트를 썼습니다. 똑같아 보이는 영상이 25.2MB 대신 44.8MB가
-  됐습니다. 소스 프레임 수는 `r_frame_rate`가 아니라 `avg_frame_rate`로
-  읽습니다. 전자는 모든 타임스탬프를 표현할 수 있는 최소 값이라 흔들림이
-  있으면 두 배가 되며, 실제로 18.5초에 554프레임인 스팀 클립이 120으로
-  보고됐습니다.
+- A 30 fps recording sent at 60 fps is no longer padded with duplicate
+  frames.
+  30fps 녹화를 60fps로 보낼 때 프레임을 복제하지 않습니다.
 
 ## v0.6.2
 

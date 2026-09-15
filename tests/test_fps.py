@@ -86,11 +86,24 @@ class TestDestination(unittest.TestCase):
     def test_the_frame_rate_is_passed_through(self):
         self.assertEqual(dest(video_fps=60).encode_args()["fps"], 60)
 
-    def test_the_frame_is_capped_at_the_decks_own_screen(self):
-        # Handheld that changes nothing; docked to a monitor the same
-        # game records taller, and those pixels would only thin out the
-        # same bitrate.
-        self.assertEqual(dest().encode_args()["maxh"], media.DECK_HEIGHT)
+    def test_the_frame_height_defaults_to_the_decks_own_screen(self):
+        self.assertEqual(dest().encode_args()["maxh"], media.DEFAULT_HEIGHT)
+
+    def test_a_chosen_height_is_used(self):
+        self.assertEqual(dest(clip_height=480).encode_args()["maxh"], 480)
+
+    def test_a_height_we_do_not_offer_falls_back(self):
+        self.assertEqual(dest(clip_height=1080).encode_args()["maxh"],
+                         media.DEFAULT_HEIGHT)
+
+    def test_discord_never_goes_above_its_own_cap(self):
+        d = destinations.build(dict(DC, clip_height=800))
+        self.assertEqual(d.encode_args()["maxh"], discord.HEIGHT_CAP)
+
+    def test_discord_honours_a_lower_choice(self):
+        # Its cap is a limit, not a target.
+        d = destinations.build(dict(DC, clip_height=480))
+        self.assertEqual(d.encode_args()["maxh"], 480)
 
     def test_discord_still_brings_the_frame_down(self):
         # A fifth of the budget: 1280x800 at ~1.1 Mbit/s would smear.

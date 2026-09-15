@@ -56,6 +56,8 @@ DEFAULTS = {
     # written before these existed named a preset instead, which
     # media.pick_bitrate translates.
     "clip_bitrate": media.DEFAULT_BITRATE,
+    # Also a ceiling: a clip recorded smaller is not stretched to it.
+    "clip_height": media.DEFAULT_HEIGHT,
     "video_fps": 30,
     "delete_after_send": False,
 

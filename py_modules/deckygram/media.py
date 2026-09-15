@@ -72,12 +72,12 @@ MIN_BITRATE = 400_000       # below this the video is not worth watching
 # duration is a hard ceiling of its own, and the lower of the two wins -
 # at 45 MB a minute cannot exceed ~6.2 Mbit/s whatever is chosen here.
 # The UI says so before the choice is made: see estimate().
-# No ceiling of our own: send the recording as it is and let the size
-# limit be the only thing that reduces it.  Named rather than numbered,
-# because the number would be a guess - Steam picks the recording
-# bitrate from the game's resolution and the quality setting, so on a
-# Deck's own screen it is 12, 7.5, 5.6 or 3.75 Mbit/s depending on
-# which of the four qualities is chosen.
+# No ceiling of our own: whatever quality Steam is set to record at is
+# what gets sent, and only the size limit reduces it.  Named rather than
+# numbered because the number is not ours to state - Steam derives it
+# from the game's resolution and the chosen recording quality, so on a
+# Deck's own screen it is 12, 7.5, 5.6 or 3.75 Mbit/s - but it is a
+# figure the person picked, in Steam's settings, not an unknown.
 SOURCE = -1
 
 # The rest line up with that same table so each one means something: a
@@ -96,13 +96,23 @@ DEFAULT_BITRATE = 6_000_000
 # someone asked for a bigger number.
 FLOOR = 400_000
 
-# What a clip is sent at, at most.  A Deck's own screen is 1280x800 and
-# that is what it records handheld, so this changes nothing for most
-# clips - but plugged into a monitor the same game records at 1080p or
-# more, and those extra pixels would only thin out the same bitrate.
-# Capping here rather than offering it as a choice: nobody wants to
-# think about resolution, and there is one right answer.
-DECK_HEIGHT = 800
+# How tall a clip may be sent, at most.  A Deck records 800 lines
+# handheld, so that ceiling only bites when it is plugged into a monitor
+# - but it is worth choosing: a clip is usually watched on a phone,
+# where 800 lines are spent on detail nobody can see, and the bits they
+# cost would do more good on the motion.  A ceiling, never a target:
+# something recorded smaller is not stretched to meet it.
+HEIGHTS = (800, 720, 600, 480)
+DEFAULT_HEIGHT = 800
+
+
+def pick_height(chosen) -> int:
+    """The chosen frame height, or the default."""
+    try:
+        n = int(chosen)
+    except (TypeError, ValueError):
+        return DEFAULT_HEIGHT
+    return n if n in HEIGHTS else DEFAULT_HEIGHT
 
 # The frame rate FLOOR is written for.  Twice the frames at the same
 # bitrate is half the bits each, so the point of giving up moves with it.

@@ -30,6 +30,7 @@ class Destination:
         self.fps = int(settings.get("video_fps") or media.BASE_FPS)
         self.bitrate = media.pick_bitrate(settings.get("clip_bitrate"),
                                           settings.get("clip_preset"))
+        self.height = media.pick_height(settings.get("clip_height"))
         self.floor = media.floor_for(self.fps)
 
     def configured(self) -> bool:
@@ -40,8 +41,8 @@ class Destination:
         return media.max_seconds(self.size_target(), self.floor)
 
     def max_height(self) -> int:
-        """Frame height cap - the Deck's own screen unless told otherwise."""
-        return media.DECK_HEIGHT
+        """Frame height cap, as chosen."""
+        return self.height
 
     def encode_args(self) -> dict:
         """What the encoder is asked for: bits, frames, and a size cap."""
@@ -132,11 +133,10 @@ class Discord(Destination):
         return discord.SIZE_LIMIT
 
     def max_height(self):
-        # Telegram sends a clip at the size it was recorded; here the
-        # budget is a fifth of that - a minute has about 1.1 Mbit/s to
-        # work with - and 1280x800 at that rate falls apart. Fewer
-        # pixels, each worth looking at.
-        return discord.HEIGHT_CAP
+        # The budget here is a fifth of Telegram's - a minute has about
+        # 1.1 Mbit/s to work with - so a taller choice than this cannot
+        # pay for itself, whatever was picked.
+        return min(super().max_height(), discord.HEIGHT_CAP)
 
     def send(self, path, caption, **kw):
         kw.update(self.encode_args())
