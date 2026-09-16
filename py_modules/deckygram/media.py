@@ -68,25 +68,18 @@ VIDEO_EXT = {".mp4", ".mkv", ".webm", ".mov"}
 AUDIO_BITRATE = 128_000     # generous bound for the 96k AAC track + container
 MIN_BITRATE = 400_000       # below this the video is not worth watching
 
-# How many bits a clip may spend per second, offered as a plain number
-# rather than a word.  Nothing here promises the clip will get it: a size
-# limit divided by a duration is a hard ceiling of its own and the lower
-# of the two wins, so at 45 MB a minute cannot exceed ~6.2 Mbit/s
-# whatever is chosen.  The UI says so before the choice is made - see
-# estimate().
-#
-# No ceiling of our own: whatever quality Steam is set to record at is
-# what gets sent, and only the size limit reduces it.  Named rather than
-# numbered because the number is not ours to state - Steam derives it
-# from the game's resolution and the chosen recording quality, so on a
-# Deck's own screen it is 12, 7.5, 5.6 or 3.75 Mbit/s - but it is a
-# figure the person picked, in Steam's settings, not an unknown.
-SOURCE = -1
+# The reference frame is the Deck's own screen, and the reference rate
+# is 12.8 Mbit/s at that frame - a touch above the 12 Mbit/s Steam's own
+# "high" setting records at, so at 800p the top row simply means "what
+# the recording has".  The other three rows are Steam's own lower tiers.
+REF_W, REF_H = 1280, 800
+LADDER = (12_800_000, 7_500_000, 6_000_000, 3_750_000)
 
-# The rest line up with that same table so each one means something: a
-# choice between two values the recording never reaches does nothing at
-# all.
-BITRATES = (SOURCE, 7_500_000, 6_000_000, 3_750_000)
+# Kept as a name because settings written before v0.7.7 hold it: it
+# meant "no ceiling of our own", and pick_bitrate() translates it to the
+# top row of the table for the chosen frame.  fit_bitrate() and
+# estimate() still accept it.  Nothing offers it any more.
+SOURCE = -1
 
 # 6 Mbit/s is as much as a minute can actually use on Telegram (45 MB
 # over 60 s is ~6.2), so it is the point where the choice and the limit
@@ -109,6 +102,53 @@ HEIGHTS = (800, 720, 600, 480)
 DEFAULT_HEIGHT = 800
 
 
+def frame_for(height: int):
+    """The 16:10 frame a clip is sent at when capped at `height` lines."""
+    w = (REF_W * height // REF_H) // 2 * 2
+    return w, height
+
+
+def scaled_bitrate(base: int, height: int) -> int:
+    """An 800p figure applied to a smaller frame, by pixel count.
+
+    Bits buy detail per pixel, so a frame with 36 % of the pixels gets
+    36 % of the rate for the same look.  Rounded to 10 kbit so the table
+    reads cleanly; integer arithmetic so it is the same on every machine.
+    """
+    w, h = frame_for(height)
+    raw = base * w * h // (REF_W * REF_H)
+    return (raw + 5_000) // 10_000 * 10_000
+
+
+def mb_per_minute(bitrate: int) -> int:
+    """What one minute weighs at this rate, video and audio, in MiB."""
+    return int(round((bitrate + AUDIO_BITRATE) * 60 / 8 / 1024 / 1024))
+
+
+def mbit_label(bitrate: int) -> str:
+    """'6', '3.75', '2.16' - two decimals at most, trailing zeros gone."""
+    return ("%.2f" % (bitrate / 1e6)).rstrip("0").rstrip(".")
+
+
+def bitrates_for(height: int):
+    """The four rates offered at this frame, highest first."""
+    return tuple(scaled_bitrate(b, height) for b in LADDER)
+
+
+def quality_table():
+    """Every frame with its four rates: what the panel lists, in order.
+
+    One row per choice, so the label can state exactly what will be
+    used - no second dropdown whose meaning shifts with the first.
+    """
+    rows = []
+    for h in HEIGHTS:
+        for b in bitrates_for(h):
+            rows.append({"height": h, "bitrate": b,
+                         "mbit": mbit_label(b), "mb_per_min": mb_per_minute(b)})
+    return rows
+
+
 def pick_height(chosen) -> int:
     """The chosen frame height, or the default."""
     try:
@@ -122,20 +162,36 @@ def pick_height(chosen) -> int:
 BASE_FPS = 30
 
 # Settings written before the bitrate was a number of its own.
-LEGACY_PRESETS = {"quality": SOURCE,
+LEGACY_PRESETS = {"quality": 12_800_000,
                   "balanced": 6_000_000,
                   "reach": 3_750_000}
 
 
-def pick_bitrate(chosen, legacy_preset=None) -> int:
-    """The chosen bitrate, an old preset translated, or the default."""
+def pick_bitrate(chosen, legacy_preset=None, height: int = DEFAULT_HEIGHT) -> int:
+    """The rate to use at `height`: a table value, or an older setting translated.
+
+    Settings written before v0.7.7 hold an 800p figure whatever the
+    frame, or SOURCE for "as recorded", or an even older preset name.
+    Each lands on the row it meant: an 800p figure scaled to the frame,
+    SOURCE on the top row, a preset on the figure it stood for.  A
+    number the table does not hold snaps to the nearest row, so a hand-
+    edited file still gets something the panel can show as selected.
+    """
+    offered = bitrates_for(height)
     try:
         n = int(chosen)
     except (TypeError, ValueError):
         n = 0
-    if n in BITRATES:
+    if n in offered:
         return n
-    return LEGACY_PRESETS.get(legacy_preset or "", DEFAULT_BITRATE)
+    if n == SOURCE:
+        return offered[0]
+    if n in LADDER:
+        return scaled_bitrate(n, height)
+    if n <= 0:
+        base = LEGACY_PRESETS.get(legacy_preset or "", DEFAULT_BITRATE)
+        return scaled_bitrate(base, height)
+    return min(offered, key=lambda b: abs(b - n))
 
 
 def floor_for(fps: int) -> int:
@@ -429,8 +485,14 @@ def prepare_video(path: str, hard_limit: int, size_target: int, bitrate: int,
     # target above the source rate only buys a bigger file.  Short clips
     # hit this: a 14 s clip has room for 26 Mbit/s inside the size limit,
     # and writing 480p at that rate came out larger than the 14 Mbit/s
-    # original.
-    target = min(budget, src_br) if src_br > 0 else budget
+    # original.  The same holds per frame: a 60 fps recording sent at
+    # 30 fps keeps the bits each frame was given, not the bits per
+    # second, so the ceiling halves with the frame rate (reported
+    # 2026-09-16: "shouldn't lowering the fps lower the size?").
+    src_cap = src_br
+    if src_fps and fps < src_fps - 0.5:
+        src_cap = int(src_br * fps / src_fps)
+    target = min(budget, src_cap) if src_br > 0 else budget
 
     tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False, dir=TMP_DIR)
     tmp.close()

@@ -1,3 +1,5 @@
+import calendar
+import time
 import unittest
 
 from . import context  # noqa: F401
@@ -20,12 +22,41 @@ class TestAppidFromPath(unittest.TestCase):
 
 class TestClipCaption(unittest.TestCase):
     def test_valid_clip_id(self):
-        cap = captions.clip_caption("clip_1091500_20260831_123456", FakeResolver())
+        # Steam writes the folder name in UTC; pin the caption's "local"
+        # time to UTC too so the expected string stays the verbatim
+        # folder time.
+        cap = captions.clip_caption("clip_1091500_20260831_123456", FakeResolver(),
+                                    localtime=time.gmtime)
         self.assertEqual(cap, "Cyberpunk 2077 · 2026-08-31 12:34")
 
     def test_malformed_clip_id(self):
         self.assertEqual(captions.clip_caption("bg_1091500_20260831", FakeResolver()),
                          "Steam Deck clip")
+
+    def test_the_caption_converts_utc_to_local_time(self):
+        # Nine zones east of UTC, so 15:30 UTC reads as 00:30 the next
+        # day - the bug this guards against showed captions "five hours
+        # early" for someone five zones east (2026-09-16).
+        cap = captions.clip_caption("clip_1091500_20260915_153023", FakeResolver(),
+                                    localtime=lambda e: time.gmtime(e + 9 * 3600))
+        self.assertTrue(cap.endswith("2026-09-16 00:30"))
+
+    def test_a_malformed_date_still_produces_a_caption(self):
+        # Month 13, day 99: not a real date, but must not raise - it
+        # falls back to the digits verbatim.
+        cap = captions.clip_caption("clip_1_20261399_123456", FakeResolver(),
+                                    localtime=time.gmtime)
+        self.assertTrue(cap)
+
+
+class TestClipTime(unittest.TestCase):
+    def test_a_valid_clip_id_gives_the_utc_epoch(self):
+        self.assertEqual(
+            captions.clip_time("clip_1_20260915_153023"),
+            calendar.timegm((2026, 9, 15, 15, 30, 23, 0, 0, 0)))
+
+    def test_an_unrecognised_id_is_none(self):
+        self.assertIsNone(captions.clip_time("bg_1_x"))
 
     def test_album_caption_has_name_and_count(self):
         cap = captions.album_caption("1091500", FakeResolver(), 5)

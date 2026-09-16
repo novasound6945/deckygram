@@ -30,10 +30,16 @@ class TestPickBitrate(unittest.TestCase):
         self.assertEqual(media.pick_bitrate("6000000"), 6_000_000)
 
     def test_send_as_recorded_is_a_choice_of_its_own(self):
-        self.assertEqual(media.pick_bitrate(media.SOURCE), media.SOURCE)
+        # CHANGED: SOURCE is no longer offered by the panel. It is kept
+        # only so an old setting still means something - it now lands
+        # on the table's top row for the chosen frame (800p, here).
+        self.assertEqual(media.pick_bitrate(media.SOURCE), media.LADDER[0])
 
     def test_a_number_we_do_not_offer_falls_back(self):
-        self.assertEqual(media.pick_bitrate(7_777_777), media.DEFAULT_BITRATE)
+        # CHANGED: a hand-edited number that is not a row snaps to the
+        # nearest row instead of resetting to the default, so a settings
+        # file edited outside the panel still shows a selected choice.
+        self.assertEqual(media.pick_bitrate(7_777_777), 7_500_000)
 
     def test_nothing_chosen_is_the_default(self):
         # Not "as recorded": an absent setting must not be read as the
@@ -42,7 +48,10 @@ class TestPickBitrate(unittest.TestCase):
         self.assertEqual(media.pick_bitrate(""), media.DEFAULT_BITRATE)
 
     def test_old_presets_are_translated(self):
-        self.assertEqual(media.pick_bitrate(None, "quality"), media.SOURCE)
+        # CHANGED: "quality" used to mean SOURCE (no ceiling of our own);
+        # now it names the figure SOURCE stood for, so it lands on the
+        # top row directly.
+        self.assertEqual(media.pick_bitrate(None, "quality"), 12_800_000)
         self.assertEqual(media.pick_bitrate(None, "balanced"), 6_000_000)
         self.assertEqual(media.pick_bitrate(None, "reach"), 3_750_000)
 
@@ -54,8 +63,12 @@ class TestPickBitrate(unittest.TestCase):
         self.assertEqual(media.pick_bitrate(3_750_000, "quality"), 3_750_000)
 
     def test_every_offered_value_is_accepted(self):
-        for b in media.BITRATES:
-            self.assertEqual(media.pick_bitrate(b), b)
+        # CHANGED: BITRATES was one ladder for every frame; now each
+        # height has its own four rows, so every row of every height
+        # must round-trip through its own height.
+        for h in media.HEIGHTS:
+            for b in media.bitrates_for(h):
+                self.assertEqual(media.pick_bitrate(b, None, h), b)
 
     def test_the_default_is_what_a_minute_can_use(self):
         # 45 MB over 60 s is ~6.2 Mbit/s, so 6 is the point where the
@@ -121,8 +134,10 @@ class TestDestination(unittest.TestCase):
                          dest(clip_bitrate=3_750_000).max_clip_seconds())
 
     def test_old_settings_still_work(self):
+        # CHANGED: "quality" used to mean SOURCE; now it lands directly
+        # on the top row of the table for the chosen height.
         self.assertEqual(dest(clip_preset="quality").encode_args()["bitrate"],
-                         media.SOURCE)
+                         12_800_000)
 
 
 class TestEstimate(unittest.TestCase):
@@ -149,13 +164,16 @@ class TestEstimate(unittest.TestCase):
         self.assertTrue(e["fits"])
         self.assertEqual(e["bitrate"], 7_500_000)
 
-    def test_as_recorded_quotes_no_length(self):
-        # There is no ceiling of ours to overrun, so how long a clip
-        # survives intact is Steam's to decide, not ours to claim.
+    def test_as_recorded_now_resolves_to_the_top_row(self):
+        # CHANGED: a Destination never holds SOURCE any more -
+        # pick_bitrate() translates it to the table's top row before
+        # estimate() ever sees it, so there is always a concrete
+        # ceiling and a length it survives intact.
         e = dest(clip_bitrate=media.SOURCE).estimate(60)
-        self.assertTrue(e["source"])
-        self.assertNotIn("full_seconds", e)
-        self.assertTrue(e["sendable"])
+        top = media.bitrates_for(media.DEFAULT_HEIGHT)[0]
+        self.assertFalse(e["source"])
+        self.assertIn("full_seconds", e)
+        self.assertEqual(e, dest(clip_bitrate=top).estimate(60))
 
     def test_as_recorded_still_respects_the_limit(self):
         e = dest(clip_bitrate=media.SOURCE).estimate(60)
@@ -433,6 +451,66 @@ class TestNeverInventFrames(unittest.TestCase):
         self.prepare(60.0, 30, 3_000_000, 400_000)
         self.assertEqual(self.seen["fps"], 30)
         self.assertEqual(self.seen["bitrate"], 3_000_000)
+
+
+class TestBitsPerFrameCannotExceedTheSource(unittest.TestCase):
+    """Sending fewer frames per second must not raise the bits each gets.
+
+    Re-encoding at the source rate cannot invent detail, and the same
+    goes per frame: a 60 fps recording sent at 30 fps keeps the bits
+    each frame was given, not the bits per second, so the ceiling this
+    checks halves with the frame rate (reported 2026-09-16: "shouldn't
+    lowering the fps lower the size?").
+    """
+
+    SRC_BR = 12_000_000
+    DUR = 20
+    SIZE = SRC_BR * DUR // 8   # 30,000,000 bytes
+
+    def setUp(self):
+        self.real_probe = media.probe
+        self.real_fps = media.source_fps
+        self.real_encode = media._encode
+        self.seen = {}
+
+        def fake_encode(src, dst, bitrate, fps, maxh, progress=None):
+            self.seen["bitrate"] = bitrate
+            with open(dst, "wb") as fh:
+                fh.write(b"x" * 1024)
+            return True
+
+        media.probe = lambda p: (1280, 800, self.DUR)
+        media.source_fps = lambda p: 60.0
+        media._encode = fake_encode
+
+    def tearDown(self):
+        media.probe = self.real_probe
+        media.source_fps = self.real_fps
+        media._encode = self.real_encode
+
+    def prepare(self, fps):
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as fh:
+            fh.write(b"y" * self.SIZE)
+            src = fh.name
+        try:
+            # A hard_limit just below the source size forces a re-encode
+            # either way, so the target bitrate can be captured
+            # regardless of fps; a generous size_target keeps the size
+            # limit from being the thing that decides it.
+            _, tmp = media.prepare_video(
+                src, self.SIZE - 1, self.SIZE * 100, 12_800_000, fps, 800)
+            if tmp:
+                os.unlink(tmp)
+        finally:
+            os.unlink(src)
+
+    def test_a_slower_frame_rate_keeps_the_bits_per_frame(self):
+        self.prepare(30)
+        self.assertEqual(self.seen["bitrate"], 6_000_000)
+
+    def test_the_source_frame_rate_keeps_the_full_rate(self):
+        self.prepare(60)
+        self.assertEqual(self.seen["bitrate"], 12_000_000)
 
 
 class TestWhatWeEncodeWith(unittest.TestCase):

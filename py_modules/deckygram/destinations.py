@@ -22,15 +22,15 @@ class Destination:
     name = ""
 
     def __init__(self, settings: dict):
-        # Two independent choices.  The bitrate is used exactly as
-        # picked - scaling it by the frame rate would make the label a
-        # lie - while the frame rate decides how many pictures those
-        # bits have to cover, and so when a clip stops being worth
-        # sending at all.
+        # The frame and the rate are one choice from a table, stored as
+        # two keys.  The rate is used exactly as picked - scaling it by
+        # the frame rate would make the label a lie - while the frame
+        # rate decides how many pictures those bits have to cover, and
+        # so when a clip stops being worth sending at all.
         self.fps = int(settings.get("video_fps") or media.BASE_FPS)
-        self.bitrate = media.pick_bitrate(settings.get("clip_bitrate"),
-                                          settings.get("clip_preset"))
         self.height = media.pick_height(settings.get("clip_height"))
+        self.bitrate = media.pick_bitrate(settings.get("clip_bitrate"),
+                                          settings.get("clip_preset"), self.height)
         self.floor = media.floor_for(self.fps)
 
     def configured(self) -> bool:

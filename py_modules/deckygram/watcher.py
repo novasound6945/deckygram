@@ -187,14 +187,12 @@ class Watcher:
                 continue
             # The rate this clip will actually be encoded at, which is
             # the chosen ceiling or the size limit, whichever is lower.
-            # Reading the setting straight would be wrong: "as recorded"
-            # is a sentinel, not a bitrate.
             fit = media.fit_bitrate(target, dur, vbr)
             est = dur * (fit + media.AUDIO_BITRATE) // 8
-            if vbr <= 0:
-                # No ceiling of ours, so the recording is what goes out
-                # - and a light one weighs less than the budget allows.
-                est = min(est, self._clip_bytes(d))
+            # The encode never spends more than the recording has (see
+            # media.prepare_video), so a light one weighs what it weighs
+            # whatever row was picked.
+            est = min(est, self._clip_bytes(d))
             clip_b += min(est, target)
 
         result = {

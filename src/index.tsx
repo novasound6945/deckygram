@@ -68,6 +68,16 @@ function QrImage({ text, loading }: { text: string; loading?: boolean }) {
 
 // ---- backend callables -----------------------------------------------------
 
+/** One row of the clip quality ladder: a frame, the bits it may spend,
+    and what a minute of it weighs. Built in media.quality_table. */
+type QualityRow = {
+  height: number;
+  bitrate: number;
+  /** Ready to print, e.g. "12.8" or "3.75" - no rounding left to do here. */
+  mbit: string;
+  mb_per_min: number;
+};
+
 type Settings = {
   token_hint: string;
   webhook_hint: string;
@@ -80,6 +90,9 @@ type Settings = {
   send_clips: boolean;
   clip_bitrate: number;
   clip_height: number;
+  // Every (frame, bitrate) pair on offer, worked out by the backend so
+  // the panel never has to do the arithmetic itself. See media.quality_table.
+  quality_table?: QualityRow[];
   video_fps: number;
   notify_on_send: boolean;
   notify_silent: boolean;
@@ -132,23 +145,15 @@ type Status = {
   url: string;
 };
 
-// How many bits a second of clip may spend. The top of the range is what
-// a Deck records at, so picking it asks for the recording as it was made.
-// Kept in step with media.BITRATES.
-// -1 is "no ceiling of ours": send it as recorded and let only the size
-// limit reduce it. The rest match Steam's own recording ladder for a
-// Deck's screen, so each one is a value a recording can actually be at.
-// Kept in step with media.BITRATES.
-const SOURCE_BITRATE = -1;
-const CLIP_BITRATES = [SOURCE_BITRATE, 7_500_000, 6_000_000, 3_750_000] as const;
 // Steam records at whatever the game manages, capped by its own setting.
 // 30 is the safe default; 60 costs twice the frames.
 const CLIP_FPS = [30, 60] as const;
-// A ceiling, not a target - a clip recorded smaller is left alone.
-// Kept in step with media.HEIGHTS.
-const CLIP_HEIGHTS = [800, 720, 600, 480] as const;
 
-const mbps = (bits: number) => String(+(bits / 1e6).toFixed(2));
+// Decky's dropdown compares the selected value by identity, so a row has
+// to be one primitive rather than a pair. Bitrates are well under 1e8,
+// which leaves the frame height in the digits above it.
+const ROW_SCALE = 100_000_000;
+const rowKey = (height: number, bitrate: number) => height * ROW_SCALE + bitrate;
 
 /** "6m 07s" / "73s" — the longest clip the current preset will take. */
 function humanMinutes(seconds: number): string {
@@ -876,34 +881,36 @@ function Content() {
           <ToggleField label={t("recorded_clips")} checked={settings.send_clips}
             onChange={(v) => patch({ send_clips: v })} />
         </PanelSectionRow>
-        {/* The two halves of one decision - how many bits a second, and
-            how many pictures share them - so they sit together with a
-            single explanation and a worked example underneath, rather
-            than a paragraph wedged between the controls. */}
+        {/* One decision, one control: the frame and the bits it may
+            spend were two dropdowns that could disagree, and nothing on
+            screen said 480p had been left at an 800p bitrate. The rows
+            come from the backend so the panel and the encoder cannot
+            drift apart, with the explanation and a worked example
+            underneath rather than wedged between the controls. */}
         {settings.send_clips ? (
           <>
             <PanelSectionRow>
               <DropdownItem
-                label={t("clip_bitrate")}
-                rgOptions={CLIP_BITRATES.map((b) => ({
-                  data: b,
-                  // No number on the first one: it is whatever Steam is
-                  // set to record at, which it derives from the game's
-                  // resolution and the chosen recording quality.
-                  label: b === SOURCE_BITRATE
-                    ? t("bitrate_source")
-                    : `${mbps(b)} Mbps`,
+                // The row spells out everything it decides, which is too
+                // wide to sit beside its own label on a panel this
+                // narrow - so the label goes above it.
+                layout="below"
+                label={t("clip_quality")}
+                rgOptions={(settings.quality_table ?? []).map((r) => ({
+                  data: rowKey(r.height, r.bitrate),
+                  label: `${r.height}p · ${r.mbit} Mbit/s · ${r.mb_per_min} ${t("mb_per_min")}`,
                 }))}
-                selectedOption={settings.clip_bitrate}
-                onChange={(o) => patch({ clip_bitrate: o.data as number })}
-              />
-            </PanelSectionRow>
-            <PanelSectionRow>
-              <DropdownItem
-                label={t("clip_height")}
-                rgOptions={CLIP_HEIGHTS.map((h) => ({ data: h, label: `${h}p` }))}
-                selectedOption={settings.clip_height}
-                onChange={(o) => patch({ clip_height: o.data as number })}
+                selectedOption={rowKey(settings.clip_height, settings.clip_bitrate)}
+                // Both halves travel in one save, so the pair is never
+                // half-applied: the backend would otherwise see a frame
+                // with the old frame's bitrate and translate it.
+                onChange={(o) => {
+                  const v = o.data as number;
+                  patch({
+                    clip_height: Math.floor(v / ROW_SCALE),
+                    clip_bitrate: v % ROW_SCALE,
+                  });
+                }}
               />
             </PanelSectionRow>
             <PanelSectionRow>
@@ -916,9 +923,9 @@ function Content() {
             </PanelSectionRow>
             <PanelSectionRow>
               <Field description={
-                `${t("clip_bitrate_desc", {
+                `${t("clip_quality_desc", {
                   len: humanMinutes(status?.max_clip_seconds ?? 0),
-                })} ${t("clip_height_desc")} ${t("clip_fps_desc")}`
+                })} ${t("clip_fps_desc")}`
               } />
             </PanelSectionRow>
             {/* What the choice buys, not what it forbids: a high

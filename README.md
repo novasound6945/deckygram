@@ -102,7 +102,7 @@ clears, **L1/R1** page. Up to 20 at a time.
 
 <sub>Discord uploads are capped by the server's tier (10 MB on a free
 server, and it follows the **server**, not your Nitro), so clips are
-encoded harder and anything over ~3 minutes is skipped. Screenshots are
+encoded harder and anything over ~2½ minutes is skipped. Screenshots are
 nowhere near the limit.</sub>
 
 ### ⚙️ Good to know
@@ -116,21 +116,32 @@ nowhere near the limit.</sub>
 - Screenshot bursts arrive as **one album** (one notification), not a
   ping per shot.
 - Clips are compressed to fit, so length and quality trade against each
-  other. **Clip quality** picks where on that curve you sit — on the
-  default, Telegram takes clips up to ~12 minutes and Discord ~2m20s;
-  anything longer is skipped up front with a toast.
-  <details><summary>What each <b>Clip quality</b> preset gives you</summary>
+  other. **Clip quality** is one list rather than two settings that could
+  disagree: each row is a frame together with the bitrate that belongs to
+  it, and states what a minute weighs at that rate.
+  <details><summary>What the <b>Clip quality</b> rows offer</summary>
 
-  | Preset | Bitrate ceiling | Height | Telegram | Discord |
-  |---|---|---|---|---|
-  | Quality first | 3 Mbps | 800p (480p) | up to 6m07s | up to 1m13s |
-  | **Balanced** | 2 Mbps | 600p (480p) | up to 11m54s | up to 2m22s |
-  | Length first | 1.2 Mbps | 480p (360p) | up to 19m10s | up to 3m50s |
+  | Frame | Bitrates offered (Mbit/s) | MB per minute |
+  |---|---|---|
+  | 800p | **12.8** / 7.5 / 6 / 3.75 | 92 |
+  | 720p | **10.37** / 6.08 / 4.86 / 3.04 | 75 |
+  | 600p | **7.2** / 4.22 / 3.38 / 2.11 | 52 |
+  | 480p | **4.61** / 2.7 / 2.16 / 1.35 | 34 |
 
-  Heights in brackets are what Discord uses — its budget is a ninth of
-  Telegram's, so the frame has to come down further to spend the bitrate
-  well. The ceiling only binds on short clips; longer ones are limited by
-  the size budget instead.
+  The MB column is the bold rate; the panel prints the figure for every
+  row. 800p at 12.8 Mbit/s is the reference — the most a Deck records — so
+  that row is the recording as it is. Each smaller frame gets the same four
+  tiers scaled by pixel count, because that is all a smaller frame can
+  show: choosing 480p now brings the bitrate down with it, and it no longer
+  comes out the same size as 800p. The bitrate is a ceiling, not a target,
+  so a recording that is already lighter is sent untouched.
+
+  Frame rate is a separate choice. A 60 fps recording sent at 30 fps keeps
+  the bits each frame was given, so it comes out about half the size.
+
+  A send has about 45 MB to spend on Telegram and about 9 MB on Discord,
+  so the row you pick decides how long a clip can be; anything that cannot
+  be made to fit is skipped up front with a toast.
   </details>
 - Failed sends retry automatically (30 s backoff, up to 5 attempts).
   After that Deckygram stops trying but **keeps the media** — press
@@ -158,7 +169,7 @@ nowhere near the limit.</sub>
 | Clips never send | Settings → **Game Recording** must not be on *Never record* (background or manual recording both work) — and a clip only exists once you **save/stop** it. Clips longer than the limit shown under **Clip quality** are skipped (toast shown). |
 | "Telegram rejected this bot" | The token was regenerated, the bot deleted, or you blocked it in Telegram. Press **Set up again**; queued media is kept and goes out once it works. |
 | "Discord rejected this webhook" | The webhook or its channel was deleted. Make a new webhook and press **Change destination**. |
-| Discord clips get skipped | A free server caps uploads at 10 MB, so clips over ~3 minutes can't fit. Boosting the server raises the cap. |
+| Discord clips get skipped | A free server caps uploads at 10 MB, so clips over ~2½ minutes can't fit. Boosting the server raises the cap. |
 | Anything else | Logs live in `~/homebrew/logs/Deckygram/` — attach the newest file to a GitHub issue along with the version shown in the panel. |
 
 ---
@@ -235,7 +246,7 @@ https://github.com/novasound6945/deckygram/releases/latest/download/Deckygram.zi
 한 번에 최대 20개.
 
 <sub>디스코드 업로드 용량은 서버 등급을 따릅니다(무료 서버 10MB, 내
-Nitro가 아니라 **서버** 기준). 그래서 클립을 더 세게 압축하고 약 3분이
+Nitro가 아니라 **서버** 기준). 그래서 클립을 더 세게 압축하고 약 2분 반이
 넘으면 건너뜁니다. 스크린샷은 한도 근처에도 가지 않습니다.</sub>
 
 ### ⚙️ 알아두면 좋은 것
@@ -248,20 +259,32 @@ Nitro가 아니라 **서버** 기준). 그래서 클립을 더 세게 압축하�
 - 연속 스크린샷은 **앨범 하나**(알림 1번)로 도착합니다 — 장마다
   울리지 않습니다.
 - 클립은 용량에 맞춰 압축되므로 길이와 화질이 서로 맞바꿔집니다.
-  **클립 화질** 설정으로 그 지점을 고릅니다 — 기본값 기준 텔레그램은
-  약 12분, 디스코드는 약 2분 20초까지 보내고, 더 길면 처음부터
-  건너뛰며 토스트로 알려줍니다.
-  <details><summary><b>클립 화질</b> 프리셋별 실제 값</summary>
+  따로 놀 수 있는 설정 두 개 대신 **클립 화질** 목록 하나로 고릅니다.
+  각 줄은 화면 크기와 거기에 맞는 비트레이트가 한 쌍이고, 그 값으로
+  1분을 보낼 때 무게까지 함께 적혀 있습니다.
+  <details><summary><b>클립 화질</b> 목록에 있는 값</summary>
 
-  | 프리셋 | 비트레이트 상한 | 해상도 | 텔레그램 | 디스코드 |
-  |---|---|---|---|---|
-  | 화질 우선 | 3 Mbps | 800p (480p) | 6분 07초까지 | 1분 13초까지 |
-  | **균형** | 2 Mbps | 600p (480p) | 11분 54초까지 | 2분 22초까지 |
-  | 길이 우선 | 1.2 Mbps | 480p (360p) | 19분 10초까지 | 3분 50초까지 |
+  | 화면 | 고를 수 있는 비트레이트 (Mbit/s) | 1분당 MB |
+  |---|---|---|
+  | 800p | **12.8** / 7.5 / 6 / 3.75 | 92 |
+  | 720p | **10.37** / 6.08 / 4.86 / 3.04 | 75 |
+  | 600p | **7.2** / 4.22 / 3.38 / 2.11 | 52 |
+  | 480p | **4.61** / 2.7 / 2.16 / 1.35 | 34 |
 
-  괄호 안은 디스코드에서 쓰는 해상도입니다. 예산이 텔레그램의 9분의 1이라
-  같은 비트레이트를 제대로 쓰려면 화면을 더 줄여야 합니다. 상한은 짧은
-  클립에서만 걸리고, 긴 클립은 용량 예산이 먼저 제한합니다.
+  MB 열은 굵게 표시한 값 기준이며, 패널에는 모든 줄의 수치가 나옵니다.
+  800p·12.8 Mbit/s가 기준점입니다 — 덱이 녹화하는 최대치라 그 줄이 곧
+  녹화본 그대로입니다. 작은 화면은 보여 줄 수 있는 만큼만 픽셀 수에
+  비례해 같은 네 단계를 받습니다. 그래서 480p를 고르면 비트레이트도 함께
+  내려갑니다. 예전에는 그러지 않아 480p가 800p와 같은 용량으로 나왔습니다.
+  비트레이트는 목표가 아니라 상한이라, 원본이 이미 더 가벼우면 그대로
+  보냅니다.
+
+  프레임 수는 따로 고릅니다. 60fps 녹화를 30fps로 보내면 프레임마다 받던
+  비트는 그대로라 파일이 절반쯤 됩니다.
+
+  한 번에 쓸 수 있는 용량은 텔레그램 약 45 MB, 디스코드 약 9 MB입니다.
+  고른 줄이 곧 보낼 수 있는 클립 길이를 정하고, 맞출 수 없는 클립은
+  처음부터 건너뛰며 토스트로 알려줍니다.
   </details>
 - 전송 실패는 30초 간격으로 **최대 5회** 자동 재시도합니다. 그 뒤에는
   시도를 멈추지만 **미디어는 보관**하므로, 문제를 해결한 뒤
@@ -289,7 +312,7 @@ Nitro가 아니라 **서버** 기준). 그래서 클립을 더 세게 압축하�
 | 클립이 전혀 안 옴 | 설정 → **게임 녹화**가 *녹화 안 함*이면 안 됩니다(백그라운드·수동 녹화 모두 지원). 클립은 **저장/녹화 종료**해야 생깁니다. **클립 화질** 설정에 표시된 길이를 넘는 클립은 건너뜁니다(토스트 표시). |
 | "텔레그램이 이 봇을 거부했습니다" | 토큰이 재발급되었거나, 봇을 삭제했거나, 텔레그램에서 봇을 차단한 경우입니다. **다시 설정하기**를 누르세요. 대기 중이던 미디어는 보관되어 있다가 정상화되면 전송됩니다. |
 | "디스코드가 이 웹훅을 거부했습니다" | 웹훅이나 해당 채널이 삭제된 경우입니다. 웹훅을 새로 만든 뒤 **보낼 곳 바꾸기**를 누르세요. |
-| 디스코드에서 클립이 계속 건너뛰어짐 | 무료 서버는 업로드가 10MB로 제한되어 약 3분이 넘는 클립은 담을 수 없습니다. 서버를 부스트하면 한도가 올라갑니다. |
+| 디스코드에서 클립이 계속 건너뛰어짐 | 무료 서버는 업로드가 10MB로 제한되어 약 2분 반이 넘는 클립은 담을 수 없습니다. 서버를 부스트하면 한도가 올라갑니다. |
 | 그 외 | 로그는 `~/homebrew/logs/Deckygram/` 에 있습니다 — 최신 파일과 패널의 버전을 GitHub 이슈에 첨부해 주세요. |
 
 ---

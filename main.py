@@ -51,9 +51,9 @@ DEFAULTS = {
     # Send notifications fire while a game is running, so the sound they
     # make is recorded along with it.  See Plugin._notify.
     "notify_silent": False,
-    # Two independent choices: how many bits a second of clip may spend
-    # (see media.BITRATES) and how many frames share them.  Settings
-    # written before these existed named a preset instead, which
+    # The frame and the rate are one choice from media.quality_table(),
+    # stored as two keys.  Settings written before that table existed
+    # hold an 800p figure, SOURCE, or a preset name instead, which
     # media.pick_bitrate translates.
     "clip_bitrate": media.DEFAULT_BITRATE,
     # Also a ceiling: a clip recorded smaller is not stretched to it.
@@ -105,6 +105,13 @@ class Plugin:
         s["has_discord"] = discord.valid_url(url)
         s.pop("token")
         s.pop("webhook_url", None)
+        # The panel lists frame and rate as one table; hand it over from
+        # here so there is exactly one copy of it, and hand back the rate
+        # as a table value so an older setting shows up as a selected row.
+        s["clip_height"] = media.pick_height(s.get("clip_height"))
+        s["clip_bitrate"] = media.pick_bitrate(s.get("clip_bitrate"),
+                                               s.get("clip_preset"), s["clip_height"])
+        s["quality_table"] = media.quality_table()
         return s
 
     async def forget_destination(self, dest: str) -> dict:

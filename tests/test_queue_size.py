@@ -60,31 +60,42 @@ class _Resolver:
         return "Game"
 
 
-class TestAsRecorded(QueueSizeTest):
-    """The sentinel must never reach the arithmetic."""
+class TestARecordingLighterThanTheChoice(QueueSizeTest):
+    """The estimate never exceeds what is on disk.
 
-    def test_a_minute_is_not_reported_as_a_megabyte(self):
-        # 60 s of a 12 Mbit/s recording is ~86 MB on disk; what goes out
-        # is whatever fits. Either way it is not 0.7 MB.
+    The encode is capped at the recording's own rate (media.prepare_video),
+    so a light recording weighs what it weighs whatever row was picked.
+    SOURCE is no longer offered; a setting that still holds it lands on
+    the top row (media.pick_bitrate), so it is checked here as one more
+    way of asking for the top row.
+    """
+
+    def top_row(self):
+        return media.bitrates_for(media.DEFAULT_HEIGHT)[0]
+
+    def test_the_old_sentinel_matches_the_top_row_choice(self):
         self.add_clip(60, 86)
-        got = self.bytes_for(clip_bitrate=media.SOURCE)
-        self.assertGreater(got, 10 * 1024 * 1024)
+        self.assertEqual(self.bytes_for(clip_bitrate=media.SOURCE),
+                         self.bytes_for(clip_bitrate=self.top_row()))
 
     def test_a_heavy_recording_is_quoted_at_the_limit(self):
         self.add_clip(60, 86)
-        self.assertLessEqual(self.bytes_for(clip_bitrate=media.SOURCE),
+        self.assertLessEqual(self.bytes_for(clip_bitrate=self.top_row()),
                              tg.SIZE_TARGET)
 
     def test_a_light_recording_is_quoted_at_its_own_size(self):
-        # Nothing of ours reduces it, so it goes out as it is.
+        # Nothing of ours enlarges it, so it goes out as it is - for the
+        # top row, for an explicit high row, and for the old sentinel.
         self.add_clip(60, 8)
-        got = self.bytes_for(clip_bitrate=media.SOURCE)
-        self.assertLess(got, 10 * 1024 * 1024)
+        for choice in (self.top_row(), 7_500_000, media.SOURCE):
+            got = self.bytes_for(clip_bitrate=choice)
+            self.assertLess(got, 10 * 1024 * 1024, choice)
+            self.assertGreater(got, 7 * 1024 * 1024, choice)
 
     def test_two_clips_add_up(self):
         self.add_clip(60, 8)
         self.add_clip(60, 8)
-        self.assertGreater(self.bytes_for(clip_bitrate=media.SOURCE),
+        self.assertGreater(self.bytes_for(clip_bitrate=self.top_row()),
                            14 * 1024 * 1024)
 
 

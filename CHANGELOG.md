@@ -2,6 +2,72 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.7.7
+
+### Changed / 변경
+
+- Clip quality is one list now: frame and bitrate together, sixteen rows,
+  each stating the rate the encoder will use and what a minute weighs at
+  it. The two separate choices had a gap between them: the bitrate did not
+  follow the frame, so 480p came out the same size as 800p, and a
+  one-minute clip came out at 43 MB whatever was picked because the size
+  limit was deciding (reported 2026-09-16: "all qualities and fps and
+  bitrate produced the same file size"). The reference is 800p at
+  12.8 Mbit/s, a touch above the most a Deck records, so that row means
+  the recording as it is; the other three are Steam's own tiers, and each
+  smaller frame gets the same four scaled by pixel count - 480p has 36 %
+  of the pixels and gets 36 % of the rate. "As recorded" is gone as a
+  choice: a setting that held it lands on the top row for its frame, and
+  an older 800p figure stored with a smaller frame lands on the scaled row.
+  클립 화질이 목록 하나가 됐습니다. 화면 크기와 비트레이트를 한 줄로
+  고르며, 열여섯 줄 각각이 인코더가 쓸 값과 그 값으로 1분을 보낼 때
+  무게를 적습니다. 따로 고르던 두 설정 사이에 빈틈이 있었습니다.
+  비트레이트가 화면 크기를 따라가지 않아 480p가 800p와 같은 크기로
+  나왔고, 1분 클립은 무엇을 골라도 크기 한도가 결정해 43 MB였습니다
+  (2026-09-16 리포트: "화질, fps, 비트레이트를 바꿔도 같은 크기"). 기준은
+  800p·12.8 Mbit/s로 덱 녹화 최대치보다 살짝 위라 그 줄이 곧 녹화본
+  그대로이고, 나머지 셋은 스팀 자체 등급이며, 작은 화면은 같은 네 줄에
+  화소 비율을 곱해 받습니다. 480p는 화소가 36%라 36%를 받습니다. "원본"
+  선택지는 사라졌고, 저장돼 있던 "원본"은 그 화면의 최고 줄로, 작은
+  화면과 함께 저장된 예전 800p 숫자는 비례한 줄로 옮겨집니다.
+
+- A 60 fps recording sent at 30 fps keeps the bits each frame was given
+  rather than the bits per second, so it comes out about half the size.
+  Before, the ceiling stayed at the recording's whole rate and the halved
+  frames simply got twice the bits each, which cannot add detail the
+  frames never had.
+  60fps 녹화를 30fps로 보내면 초당 비트가 아니라 프레임마다 받던 비트를
+  유지해 파일이 절반쯤 됩니다. 전에는 상한이 녹화 전체 비트레이트에
+  머물러 절반이 된 프레임이 각각 두 배의 비트를 받았는데, 그건 프레임에
+  없던 디테일을 더해 주지 못합니다.
+
+### Fixed / 수정
+
+- Clip captions were hours off. Steam names a clip folder in UTC, and the
+  caption printed those digits as they were, so a clip taken at 19:58 read
+  16:58 - or, in Korea, one taken at 00:30 read 15:30 the day before. The
+  folder time is now read as UTC and shown in the Deck's own zone.
+  Screenshots were never affected; their captions come from the file's
+  own time.
+  클립 캡션의 시각이 몇 시간씩 어긋났습니다. 스팀은 클립 폴더 이름을
+  UTC로 짓는데 캡션이 그 숫자를 그대로 찍어서, 19:58에 찍은 클립이
+  16:58로, 한국에서는 00:30에 찍은 클립이 전날 15:30으로 나갔습니다. 이제
+  폴더 시각을 UTC로 읽어 덱의 시간대로 표시합니다. 스크린샷은 파일 자체의
+  시각을 쓰므로 원래 문제가 없었습니다.
+
+- The queued-clips size shown in the panel never exceeds what the
+  recordings weigh on disk, whatever row is picked; before, only "as
+  recorded" was quoted that way.
+  패널의 대기 클립 용량 예상치가 어떤 줄을 골라도 녹화본의 실제 크기를
+  넘지 않습니다. 전에는 "원본"을 골랐을 때만 그렇게 견적했습니다.
+
+### Thanks / 감사
+
+- **@EslamBradwil**, for the size table across every setting and for
+  spotting the clock.
+  설정별 크기 표와 시각 문제를 짚어 주신 **@EslamBradwil**님, 이번에도
+  고맙습니다.
+
 ## v0.7.6
 
 ### Changed / 변경
