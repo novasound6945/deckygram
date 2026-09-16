@@ -5,11 +5,11 @@ Videos are compressed before sending so they arrive fast on a phone:
   - bitrate is capped; if the source is already light it is sent as-is
   - files over the destination's limit get their bitrate lowered to fit
 
-Compression uses the Deck's hardware encoder (VAAPI, H.265) end to end -
-decode, scale and encode all stay on the GPU's dedicated video block, so
-a running game is barely affected.  Measured on a Steam Deck: an
-89-second clip encodes in ~13 s at ~7 % CPU.  Falls back to H.264 VAAPI,
-then software x264, for sources the hardware cannot handle.
+Compression runs on the Deck's hardware H.264 encoder (VAAPI): the clip
+is decoded and scaled in software, then handed to the GPU's video block
+to encode, so the CPU - and on an APU that means the power budget the
+game is drawing on - stays with the game.  Software x264, capped at two
+threads, is the fallback for a Deck whose hardware encoder is unavailable.
 
 Every size figure is passed in rather than baked in: Telegram allows
 50 MB per upload, an unboosted Discord server only 10 MB, so the same
@@ -299,7 +299,7 @@ def _run_ffmpeg(cmd, duration: int, progress=None) -> bool:
 
 def _encode(src: str, dst: str, bitrate: int, fps: int, maxh: int,
             progress=None) -> bool:
-    """Software H.264 first, with the GPU encoder behind it.
+    """Hardware H.264 first, software x264 behind it.
 
     Steam records H.264 and that is what goes back out.  Measured on a
     Deck against the source scaled to 768x480, all at 2.5 Mbit/s on the
@@ -309,12 +309,23 @@ def _encode(src: str, dst: str, bitrate: int, fps: int, maxh: int,
         h264_vaapi          SSIM 0.9407   14.3 MB   4.6 s
         hevc_vaapi          SSIM 0.9345   14.2 MB   4.6 s
         hevc_vaapi, GPU scale, full-GPU decode
-                            SSIM 0.9310   14.3 MB   5.3 s   <- was first
+                            SSIM 0.9310   14.3 MB   5.3 s
 
-    So the two things that had been picked for speed were both costing
-    picture: the HEVC encoder is weaker than the H.264 one on this chip
-    at these rates, and scale_vaapi is weaker than the software scaler.
-    HEVC also asks more of whatever plays the file at the other end.
+    HEVC and scale_vaapi are out: both had been picked for speed and
+    both scored below the H.264 encoder and the software scaler.  HEVC
+    also asks more of whatever plays the file at the other end.
+
+    Between the two H.264 encoders the GPU one goes first.  v0.7.4 put
+    libx264 ahead for the 0.013 of SSIM and paid three times the encode
+    time for it (a 48 s clip: 5 s to 15 s) - on the Deck's APU the CPU
+    and the GPU draw on one power budget, so an encode running during
+    play takes frames from the game, and the picture gap is not visible
+    at phone size.  x264 stays as the fallback, held to two threads so
+    that even the fallback leaves the game most of the CPU.
+
+    The 480p breakage reported against v0.7.3 never reproduced here; if
+    it shows up on this path the encoder block is the cause, since the
+    scaler is already software, and the answer is x264 first.
     """
     w, h, dur = probe(src)
     scale = ",scale=-2:%d" % maxh if maxh and h > maxh and w else ""
@@ -323,16 +334,16 @@ def _encode(src: str, dst: str, bitrate: int, fps: int, maxh: int,
     prog = ["-progress", "pipe:1", "-nostats"]
     attempts = [
         nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
-                "-i", src,
-                "-vf", "fps=%d%s" % (fps, scale),
-                "-c:v", "libx264", "-preset", "veryfast",
-                "-b:v", str(bitrate), "-maxrate", str(bitrate),
-                "-bufsize", str(bitrate * 2),
-                "-c:a", "aac", "-b:a", "96k", dst],
-        nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
                 "-vaapi_device", VAAPI_DEV, "-i", src,
                 "-vf", "fps=%d%s,format=nv12,hwupload" % (fps, scale),
                 "-c:v", "h264_vaapi", "-b:v", str(bitrate), "-maxrate", str(bitrate),
+                "-c:a", "aac", "-b:a", "96k", dst],
+        nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
+                "-i", src,
+                "-vf", "fps=%d%s" % (fps, scale),
+                "-c:v", "libx264", "-preset", "veryfast", "-threads", "2",
+                "-b:v", str(bitrate), "-maxrate", str(bitrate),
+                "-bufsize", str(bitrate * 2),
                 "-c:a", "aac", "-b:a", "96k", dst],
     ]
     for cmd in attempts:

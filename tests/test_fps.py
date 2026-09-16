@@ -436,11 +436,13 @@ class TestNeverInventFrames(unittest.TestCase):
 
 
 class TestWhatWeEncodeWith(unittest.TestCase):
-    """H.264 goes out, and the software scaler does the scaling.
+    """H.264 goes out, the GPU encodes it, the software scaler scales it.
 
-    Both were measured on a Deck at 2.5 Mbit/s: hevc_vaapi scored below
-    h264_vaapi, and scale_vaapi below the software scaler, so the two
-    choices made for speed were each costing picture.
+    Measured on a Deck at 2.5 Mbit/s: hevc_vaapi scored below
+    h264_vaapi, and scale_vaapi below the software scaler, so both are
+    out.  Of the two H.264 encoders the hardware one goes first - on an
+    APU a CPU encode during play costs the game frames - and x264 is the
+    fallback, held to two threads for the same reason.
     """
 
     def setUp(self):
@@ -466,11 +468,18 @@ class TestWhatWeEncodeWith(unittest.TestCase):
     def test_nothing_reaches_for_hevc(self):
         self.assertFalse([c for c in self.encode() if "hevc" in c])
 
-    def test_the_first_attempt_is_software_h264(self):
-        self.assertIn("libx264", self.encode()[0])
+    def test_the_first_attempt_is_the_gpu_h264_encoder(self):
+        self.assertIn("h264_vaapi", self.encode()[0])
 
-    def test_the_gpu_encoder_is_kept_as_a_fallback(self):
-        self.assertTrue([c for c in self.encode() if "h264_vaapi" in c])
+    def test_software_h264_is_kept_as_a_fallback(self):
+        self.assertIn("libx264", self.encode()[1])
+
+    def test_the_software_fallback_is_held_to_two_threads(self):
+        for cmd in self.encode():
+            if "libx264" in cmd:
+                self.assertIn("-threads 2", cmd)
+            else:
+                self.assertNotIn("-threads", cmd)
 
     def test_scaling_never_goes_through_the_gpu_scaler(self):
         self.assertFalse([c for c in self.encode() if "scale_vaapi" in c])

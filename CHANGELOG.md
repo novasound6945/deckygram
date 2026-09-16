@@ -2,6 +2,49 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.7.5
+
+### Changed / 변경
+
+- Clips are encoded on the GPU again, still as H.264. v0.7.4 moved the
+  encode to the CPU for a small gain in picture (SSIM 0.9537 against
+  0.9407 for the hardware encoder) and paid for it with three times the
+  encode time - and on the Deck's APU the CPU and the GPU draw on the
+  same power budget, so an encode running during play takes frames from
+  the game. The gap is not visible at phone size; the frame drops are.
+  The hardware H.264 encoder now goes first, the frame is still scaled
+  in software, and x264 stays behind it as the fallback, capped at two
+  threads so that even the fallback leaves the game most of the CPU.
+  HEVC and the GPU scaler stay out.
+  클립을 다시 GPU에서 인코딩합니다. 코덱은 그대로 H.264입니다. v0.7.4는
+  약간의 화질(SSIM 0.9537, 하드웨어 인코더는 0.9407)을 위해 인코딩을
+  CPU로 옮겼고, 그 대가로 인코딩 시간이 세 배가 됐습니다. 덱의 APU는 CPU와
+  GPU가 전력 예산을 나눠 쓰므로, 플레이 중에 돌아가는 인코딩은 게임의
+  프레임을 가져갑니다. 그 화질 차이는 휴대폰 화면에서 보이지 않지만 프레임
+  저하는 보입니다. 이제 하드웨어 H.264 인코더가 1순위이고, 크기 조정은
+  여전히 소프트웨어로 하며, x264는 폴백으로 남되 스레드를 2개로 제한해
+  폴백이 돌아도 게임에 CPU를 남겨 둡니다. HEVC와 GPU 스케일러는 계속
+  쓰지 않습니다.
+
+- The README said H.265 and "~7 % CPU"; both described the encoder that
+  left in v0.7.4. It now describes what actually runs.
+  README에 H.265와 "CPU 약 7%"라고 적혀 있었는데, 둘 다 v0.7.4에서 빠진
+  인코더 이야기였습니다. 지금 실제로 돌아가는 구성대로 고쳤습니다.
+
+### Note / 참고
+
+- The broken 480p output reported against v0.7.3 never reproduced here,
+  and v0.7.4 removed both parts that could have caused it: the HEVC
+  encoder and the GPU scaler. This release brings the GPU encoder back,
+  as H.264, and keeps the scaler in software. If 480p comes out broken
+  again, that places the fault in the encoder block, and the fix is to
+  put x264 first - please report it.
+  v0.7.3에서 보고된 480p 깨짐은 이쪽에서 재현되지 않았고, v0.7.4는 원인일
+  수 있는 두 부품인 HEVC 인코더와 GPU 스케일러를 모두 뺐습니다. 이번
+  릴리스는 GPU 인코더를 H.264로 되살리고 스케일러는 소프트웨어로 둡니다.
+  480p가 다시 깨지면 원인은 인코더 블록이라는 뜻이고, 그때는 x264를
+  1순위로 두면 됩니다. 알려 주세요.
+
 ## v0.7.4
 
 ### Fixed / 수정
