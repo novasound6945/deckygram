@@ -299,42 +299,40 @@ def _run_ffmpeg(cmd, duration: int, progress=None) -> bool:
 
 def _encode(src: str, dst: str, bitrate: int, fps: int, maxh: int,
             progress=None) -> bool:
-    """Try full-GPU H.265, then GPU with CPU decode, then software x264."""
+    """Software H.264 first, with the GPU encoder behind it.
+
+    Steam records H.264 and that is what goes back out.  Measured on a
+    Deck against the source scaled to 768x480, all at 2.5 Mbit/s on the
+    same 48 s clip:
+
+        libx264 veryfast    SSIM 0.9537   13.6 MB   6.9 s
+        h264_vaapi          SSIM 0.9407   14.3 MB   4.6 s
+        hevc_vaapi          SSIM 0.9345   14.2 MB   4.6 s
+        hevc_vaapi, GPU scale, full-GPU decode
+                            SSIM 0.9310   14.3 MB   5.3 s   <- was first
+
+    So the two things that had been picked for speed were both costing
+    picture: the HEVC encoder is weaker than the H.264 one on this chip
+    at these rates, and scale_vaapi is weaker than the software scaler.
+    HEVC also asks more of whatever plays the file at the other end.
+    """
     w, h, dur = probe(src)
-    scale_hw = ""
-    scale_sw = ""
-    if maxh and h > maxh and w:
-        tw = (w * maxh // h) // 2 * 2
-        scale_hw = ",scale_vaapi=w=%d:h=%d" % (tw, maxh)
-        scale_sw = ",scale=-2:%d" % maxh
+    scale = ",scale=-2:%d" % maxh if maxh and h > maxh and w else ""
 
     nice = ["nice", "-n", "19", "ionice", "-c", "3"] if os.name != "nt" else []
     prog = ["-progress", "pipe:1", "-nostats"]
     attempts = [
         nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
-                "-hwaccel", "vaapi", "-hwaccel_device", VAAPI_DEV,
-                "-hwaccel_output_format", "vaapi", "-i", src,
-                "-vf", "fps=%d%s" % (fps, scale_hw),
-                "-c:v", "hevc_vaapi", "-b:v", str(bitrate), "-maxrate", str(bitrate),
-                "-compression_level", "1", "-tag:v", "hvc1",
-                "-c:a", "aac", "-b:a", "96k", dst],
-        nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
-                "-vaapi_device", VAAPI_DEV, "-i", src,
-                "-vf", "fps=%d%s,format=nv12,hwupload" % (fps, scale_sw),
-                "-c:v", "hevc_vaapi", "-b:v", str(bitrate), "-maxrate", str(bitrate),
-                "-compression_level", "1", "-tag:v", "hvc1",
-                "-c:a", "aac", "-b:a", "96k", dst],
-        nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
-                "-vaapi_device", VAAPI_DEV, "-i", src,
-                "-vf", "fps=%d%s,format=nv12,hwupload" % (fps, scale_sw),
-                "-c:v", "h264_vaapi", "-b:v", str(bitrate), "-maxrate", str(bitrate),
-                "-c:a", "aac", "-b:a", "96k", dst],
-        nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
                 "-i", src,
-                "-vf", "fps=%d%s" % (fps, scale_sw),
+                "-vf", "fps=%d%s" % (fps, scale),
                 "-c:v", "libx264", "-preset", "veryfast",
                 "-b:v", str(bitrate), "-maxrate", str(bitrate),
                 "-bufsize", str(bitrate * 2),
+                "-c:a", "aac", "-b:a", "96k", dst],
+        nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
+                "-vaapi_device", VAAPI_DEV, "-i", src,
+                "-vf", "fps=%d%s,format=nv12,hwupload" % (fps, scale),
+                "-c:v", "h264_vaapi", "-b:v", str(bitrate), "-maxrate", str(bitrate),
                 "-c:a", "aac", "-b:a", "96k", dst],
     ]
     for cmd in attempts:
@@ -379,13 +377,16 @@ def prepare_video(path: str, hard_limit: int, size_target: int, bitrate: int,
     budget = fit_bitrate(size_target, dur, bitrate)
 
     # Already light enough (within 15 % of the cap): send as-is - unless
-    # it is taller than asked for.  Skipping the encode also skipped the
-    # scale, so a clip that happened to fit went out at its recorded
-    # size however small a frame had been chosen, and choosing 480p did
-    # nothing at all (reported 2026-09-16: "renders at maximum
-    # resolution").
+    # the frame or the frame rate is above what was asked for.  Skipping
+    # the encode skips the scale and the fps filter with it, so a clip
+    # that happened to fit went out exactly as recorded however small a
+    # frame or slow a rate had been chosen (reported 2026-09-16:
+    # "renders at maximum resolution", "30fps option doesn't work, it
+    # stays in 60fps all the time").
     too_tall = bool(maxh) and height > maxh
-    if size <= hard_limit and src_br <= budget * 115 // 100 and not too_tall:
+    too_fast = bool(src_fps) and src_fps > fps + 0.5
+    as_asked = not (too_tall or too_fast)
+    if size <= hard_limit and src_br <= budget * 115 // 100 and as_asked:
         return path, None
 
     # The floor is about the budget, not the recording: it refuses a
@@ -412,7 +413,7 @@ def prepare_video(path: str, hard_limit: int, size_target: int, bitrate: int,
     if new == 0 or new > hard_limit:
         os.unlink(tmp.name)
         raise Unsendable("compressed output still over the limit")
-    if new >= size and size <= hard_limit and not too_tall:
+    if new >= size and size <= hard_limit and as_asked:
         os.unlink(tmp.name)     # compression did not help; keep the original
         return path, None
     return tmp.name, tmp.name

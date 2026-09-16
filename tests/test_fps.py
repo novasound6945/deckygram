@@ -266,6 +266,25 @@ class TestALighterRecordingIsLeftAlone(unittest.TestCase):
         self.assertTrue(self.run_with(1, 10, media.SOURCE, maxh=0))
         self.assertFalse(self.encoded)
 
+    def test_a_faster_recording_is_encoded_even_when_it_would_fit(self):
+        # The fps filter lives in the encode, so passing a light clip
+        # straight through left it at the rate it was recorded at, and
+        # picking 30 did nothing to a 60 fps clip (reported 2026-09-16:
+        # "30fps option doesn't work, it stays in 60fps all the time").
+        media.source_fps = lambda p: 60.0
+        self.assertFalse(self.run_with(1, 10, media.SOURCE))
+        self.assertTrue(self.encoded)
+
+    def test_a_recording_already_at_the_asked_rate_passes_through(self):
+        media.source_fps = lambda p: 30.0
+        self.assertTrue(self.run_with(1, 10, media.SOURCE))
+        self.assertFalse(self.encoded)
+
+    def test_a_slower_recording_is_not_encoded_to_speed_it_up(self):
+        media.source_fps = lambda p: 24.0
+        self.assertTrue(self.run_with(1, 10, media.SOURCE))
+        self.assertFalse(self.encoded)
+
 
 class TestScalingSurvivesAnUnhelpfulEncode(unittest.TestCase):
     """A smaller frame must still be delivered smaller.
@@ -414,6 +433,56 @@ class TestNeverInventFrames(unittest.TestCase):
         self.prepare(60.0, 30, 3_000_000, 400_000)
         self.assertEqual(self.seen["fps"], 30)
         self.assertEqual(self.seen["bitrate"], 3_000_000)
+
+
+class TestWhatWeEncodeWith(unittest.TestCase):
+    """H.264 goes out, and the software scaler does the scaling.
+
+    Both were measured on a Deck at 2.5 Mbit/s: hevc_vaapi scored below
+    h264_vaapi, and scale_vaapi below the software scaler, so the two
+    choices made for speed were each costing picture.
+    """
+
+    def setUp(self):
+        self.real_probe = media.probe
+        self.real_run = media._run_ffmpeg
+        self.cmds = []
+
+        def fake_run(cmd, dur, progress=None):
+            self.cmds.append(cmd)
+            return False        # keep going so every attempt is seen
+
+        media.probe = lambda p: (1280, 800, 10)
+        media._run_ffmpeg = fake_run
+
+    def tearDown(self):
+        media.probe = self.real_probe
+        media._run_ffmpeg = self.real_run
+
+    def encode(self, maxh=480):
+        media._encode("in.mp4", "out.mp4", 2_500_000, 30, maxh)
+        return [" ".join(c) for c in self.cmds]
+
+    def test_nothing_reaches_for_hevc(self):
+        self.assertFalse([c for c in self.encode() if "hevc" in c])
+
+    def test_the_first_attempt_is_software_h264(self):
+        self.assertIn("libx264", self.encode()[0])
+
+    def test_the_gpu_encoder_is_kept_as_a_fallback(self):
+        self.assertTrue([c for c in self.encode() if "h264_vaapi" in c])
+
+    def test_scaling_never_goes_through_the_gpu_scaler(self):
+        self.assertFalse([c for c in self.encode() if "scale_vaapi" in c])
+
+    def test_every_attempt_scales_and_sets_the_rate(self):
+        for cmd in self.encode():
+            self.assertIn("scale=-2:480", cmd)
+            self.assertIn("fps=30", cmd)
+
+    def test_a_frame_within_the_cap_is_not_scaled(self):
+        for cmd in self.encode(maxh=800):
+            self.assertNotIn("scale=", cmd)
 
 
 if __name__ == "__main__":

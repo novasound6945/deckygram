@@ -2,6 +2,39 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.7.4
+
+### Fixed / 수정
+
+- Picking 30 fps did nothing to a 60 fps recording. The frame rate is
+  set during the encode, and a clip small enough to send skipped the
+  encode - the same gap that made the resolution cap do nothing.
+  30fps를 골라도 60fps 녹화가 그대로 나갔습니다. 프레임 수는 인코딩할 때
+  정해지는데, 전송 가능한 크기의 클립은 인코딩을 건너뛰었습니다. 해상도
+  상한이 동작하지 않던 것과 같은 자리입니다.
+
+### Changed / 변경
+
+- Clips go out as H.264, the codec Steam records in, and the scaling is
+  done in software. Both had been chosen for speed and both were
+  costing picture. Measured on a Deck at 2.5 Mbit/s from one source,
+  as SSIM against that source: libx264 0.9537, h264_vaapi 0.9407,
+  hevc_vaapi 0.9345, and the previous first choice - HEVC with the GPU
+  scaler - 0.9310. The files are within 5 % of each other in size.
+  Encoding takes longer for it; a 48-second clip went from 5 to 15
+  seconds.
+  클립을 스팀이 녹화하는 코덱인 H.264로 내보내고, 크기 조정도
+  소프트웨어로 합니다. 둘 다 속도를 위해 고른 것이었는데 둘 다 화질을 깎고
+  있었습니다. 같은 원본 2.5 Mbit/s 기준 덱 실측 SSIM은 libx264 0.9537,
+  h264_vaapi 0.9407, hevc_vaapi 0.9345, 기존 1순위였던 HEVC + GPU
+  스케일러 0.9310입니다. 용량 차이는 5% 이내입니다. 대신 인코딩이
+  길어집니다. 48초 클립 기준 5초에서 15초가 됐습니다.
+
+### Thanks / 감사
+
+- **@EslamBradwil** again, for catching both of these.
+  이번에도 **@EslamBradwil**님이 두 가지를 모두 짚어 주셨습니다.
+
 ## v0.7.3
 
 ### Fixed / 수정
