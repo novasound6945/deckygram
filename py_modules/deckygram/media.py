@@ -5,11 +5,14 @@ Videos are compressed before sending so they arrive fast on a phone:
   - bitrate is capped; if the source is already light it is sent as-is
   - files over the destination's limit get their bitrate lowered to fit
 
-Compression runs on the Deck's hardware H.264 encoder (VAAPI): the clip
-is decoded and scaled in software, then handed to the GPU's video block
-to encode, so the CPU - and on an APU that means the power budget the
-game is drawing on - stays with the game.  Software x264, capped at two
-threads, is the fallback for a Deck whose hardware encoder is unavailable.
+Compression runs on the Deck's video block (VAAPI, H.264) at both ends:
+the clip is decoded there, the frame rate is dropped on GPU frames, and
+only a frame that has to shrink comes down to system memory to be scaled
+before going back up to the encoder.  So the CPU - and on an APU that
+means the power budget the game is drawing on - stays with the game.
+Measured on a Deck, a 15 s 60 fps clip going to 480p costs 3.7 CPU
+seconds spread thin over 3 s.  Software decode into the same encoder,
+then software x264 capped at two threads, are the fallbacks.
 
 Every size figure is passed in rather than baked in: Telegram allows
 50 MB per upload, an unboosted Discord server only 10 MB, so the same
@@ -299,40 +302,57 @@ def _run_ffmpeg(cmd, duration: int, progress=None) -> bool:
 
 def _encode(src: str, dst: str, bitrate: int, fps: int, maxh: int,
             progress=None) -> bool:
-    """Hardware H.264 first, software x264 behind it.
+    """GPU decode and encode first, then software decode, then x264.
 
-    Steam records H.264 and that is what goes back out.  Measured on a
-    Deck against the source scaled to 768x480, all at 2.5 Mbit/s on the
-    same 48 s clip:
+    Steam records H.264 and that is what goes back out.  HEVC and
+    scale_vaapi are out: measured on a Deck at 2.5 Mbit/s against the
+    source scaled to 768x480, the HEVC encoder scored below the H.264
+    one (SSIM 0.9345 against 0.9407) and the GPU scaler below the
+    software one (0.9310 for the two together), and HEVC asks more of
+    whatever plays the file at the other end.
 
-        libx264 veryfast    SSIM 0.9537   13.6 MB   6.9 s
-        h264_vaapi          SSIM 0.9407   14.3 MB   4.6 s
-        hevc_vaapi          SSIM 0.9345   14.2 MB   4.6 s
-        hevc_vaapi, GPU scale, full-GPU decode
-                            SSIM 0.9310   14.3 MB   5.3 s
+    Between the H.264 encoders the GPU one goes first: libx264 scores
+    0.9537 but costs three times the encode time on the CPU, and on the
+    Deck's APU the CPU and the GPU draw on one power budget, so an
+    encode during play takes frames from the game for a picture gap not
+    visible at phone size.
 
-    HEVC and scale_vaapi are out: both had been picked for speed and
-    both scored below the H.264 encoder and the software scaler.  HEVC
-    also asks more of whatever plays the file at the other end.
+    The decode is on the GPU too.  v0.7.5 decoded in software and that
+    was most of the cost - one 15 s 1280x800 60 fps clip, at 10 Mbit/s:
 
-    Between the two H.264 encoders the GPU one goes first.  v0.7.4 put
-    libx264 ahead for the 0.013 of SSIM and paid three times the encode
-    time for it (a 48 s clip: 5 s to 15 s) - on the Deck's APU the CPU
-    and the GPU draw on one power budget, so an encode running during
-    play takes frames from the game, and the picture gap is not visible
-    at phone size.  x264 stays as the fallback, held to two threads so
-    that even the fallback leaves the game most of the CPU.
+        to 480p, 30 fps:
+          sw decode, sw scale, h264_vaapi   wall 1.5 s  CPU 8.4 s  (5.7 threads)
+          GPU decode, sw scale, h264_vaapi  wall 3.2 s  CPU 3.7 s  (1.1 threads)  <- first
+          libx264 veryfast, 2 threads       wall 3.0 s  CPU 12.7 s (4.2 threads)
+        at 800p (no scaling), 30 fps:
+          sw decode, h264_vaapi             wall 1.8 s  CPU 7.2 s  (4.0 threads)
+          GPU decode, h264_vaapi            wall 2.7 s  CPU 1.5 s  (0.55 threads) <- first
 
-    The 480p breakage reported against v0.7.3 never reproduced here; if
-    it shows up on this path the encoder block is the cause, since the
-    scaler is already software, and the answer is x264 first.
+    The output is identical either way (SSIM against one reference
+    agrees to six digits), so the decode is free to move.  The fps drop
+    happens on GPU frames, before anything is copied down; a smaller
+    frame is the only thing that comes down, to be scaled in software,
+    and goes back up.  x264 stays last, held to two threads so that
+    even the fallback leaves the game most of the CPU.
+
+    The 480p breakage reported against v0.7.3 never reproduced here; the
+    GPU H.264 path was checked on a Deck against real recordings for
+    v0.7.5 and v0.7.6 (codec, size, frame rate all as asked).
     """
     w, h, dur = probe(src)
     scale = ",scale=-2:%d" % maxh if maxh and h > maxh and w else ""
+    # On GPU frames a scale means a trip down to system memory and back.
+    gpu_scale = ",hwdownload,format=nv12%s,hwupload" % scale if scale else ""
 
     nice = ["nice", "-n", "19", "ionice", "-c", "3"] if os.name != "nt" else []
     prog = ["-progress", "pipe:1", "-nostats"]
     attempts = [
+        nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
+                "-hwaccel", "vaapi", "-hwaccel_device", VAAPI_DEV,
+                "-hwaccel_output_format", "vaapi", "-i", src,
+                "-vf", "fps=%d%s" % (fps, gpu_scale),
+                "-c:v", "h264_vaapi", "-b:v", str(bitrate), "-maxrate", str(bitrate),
+                "-c:a", "aac", "-b:a", "96k", dst],
         nice + ["ffmpeg", "-y", "-loglevel", "error"] + prog + [
                 "-vaapi_device", VAAPI_DEV, "-i", src,
                 "-vf", "fps=%d%s,format=nv12,hwupload" % (fps, scale),

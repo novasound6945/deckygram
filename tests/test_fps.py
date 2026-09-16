@@ -436,13 +436,13 @@ class TestNeverInventFrames(unittest.TestCase):
 
 
 class TestWhatWeEncodeWith(unittest.TestCase):
-    """H.264 goes out, the GPU encodes it, the software scaler scales it.
+    """H.264 goes out, the GPU decodes and encodes it, software scales it.
 
-    Measured on a Deck at 2.5 Mbit/s: hevc_vaapi scored below
-    h264_vaapi, and scale_vaapi below the software scaler, so both are
-    out.  Of the two H.264 encoders the hardware one goes first - on an
-    APU a CPU encode during play costs the game frames - and x264 is the
-    fallback, held to two threads for the same reason.
+    Measured on a Deck: hevc_vaapi scored below h264_vaapi and
+    scale_vaapi below the software scaler, so both are out.  Of the two
+    H.264 encoders the hardware one goes first, and the decode is on
+    the GPU as well - software decode was most of the CPU cost - with
+    software decode and then x264, held to two threads, as fallbacks.
     """
 
     def setUp(self):
@@ -471,8 +471,31 @@ class TestWhatWeEncodeWith(unittest.TestCase):
     def test_the_first_attempt_is_the_gpu_h264_encoder(self):
         self.assertIn("h264_vaapi", self.encode()[0])
 
-    def test_software_h264_is_kept_as_a_fallback(self):
-        self.assertIn("libx264", self.encode()[1])
+    def test_software_h264_is_kept_as_the_last_fallback(self):
+        cmds = self.encode()
+        self.assertEqual(len(cmds), 3)
+        self.assertIn("libx264", cmds[-1])
+
+    def test_the_first_attempt_decodes_on_the_gpu(self):
+        first = self.encode()[0]
+        self.assertIn("-hwaccel vaapi", first)
+        self.assertIn("-hwaccel_output_format vaapi", first)
+
+    def test_software_decode_into_the_gpu_encoder_is_the_middle_fallback(self):
+        middle = self.encode()[1]
+        self.assertIn("h264_vaapi", middle)
+        self.assertIn("format=nv12,hwupload", middle)
+        self.assertNotIn("-hwaccel", middle)
+
+    def test_a_smaller_frame_comes_down_to_be_scaled_and_goes_back_up(self):
+        self.assertIn("fps=30,hwdownload,format=nv12,scale=-2:480,hwupload",
+                      self.encode()[0])
+
+    def test_no_scaling_means_no_trip_through_system_memory(self):
+        first = self.encode(maxh=800)[0]
+        self.assertIn("-vf fps=30 ", first)
+        self.assertNotIn("hwdownload", first)
+        self.assertNotIn("hwupload", first)
 
     def test_the_software_fallback_is_held_to_two_threads(self):
         for cmd in self.encode():

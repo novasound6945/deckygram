@@ -2,6 +2,46 @@
 
 All notable changes to Deckygram. / Deckygram의 주요 변경 사항입니다.
 
+## v0.7.6
+
+### Changed / 변경
+
+- Clips are decoded on the GPU as well as encoded there. v0.7.5 put the
+  hardware encoder first but still decoded in software, and on the Deck
+  that decode was most of the cost: a 15-second 60 fps clip going to
+  480p spent 8.4 CPU-seconds across nearly six threads in one burst.
+  With the decode on the video block, the frame-rate drop done on GPU
+  frames, and a software scale in between only when a smaller frame is
+  asked for, the same clip spends 3.7 CPU-seconds on about one thread;
+  at the recorded size, 1.5 CPU-seconds on half a thread. The output is
+  identical - SSIM against the same reference agrees to six digits -
+  and the encode still runs at about five times real time. Software
+  decode into the same encoder stays as the fallback, and x264 behind it.
+  클립을 인코딩뿐 아니라 디코딩도 GPU에서 합니다. v0.7.5는 하드웨어
+  인코더를 1순위로 뒀지만 디코딩은 여전히 소프트웨어였고, 덱에서는 그
+  디코딩이 비용의 대부분이었습니다. 15초짜리 60fps 클립을 480p로 보내는
+  데 CPU 8.4초를 스레드 여섯 개 가까이에 한꺼번에 몰아 썼습니다. 디코딩을
+  비디오 블록으로 옮기고, 프레임 수는 GPU 프레임에서 낮추고, 작은 화면을
+  골랐을 때만 그 사이에 소프트웨어 크기 조정을 두니 같은 클립이 CPU
+  3.7초를 스레드 하나 정도에서 씁니다. 녹화된 크기 그대로면 CPU 1.5초,
+  스레드 반 개입니다. 결과물은 동일하고(같은 기준 대비 SSIM이 소수점 여섯
+  자리까지 일치) 인코딩은 여전히 실시간의 약 5배 속도입니다. 같은 인코더로
+  가는 소프트웨어 디코딩이 폴백으로 남고, 그 뒤에 x264가 있습니다.
+
+### Verified on a Deck / 덱 실기 확인
+
+- v0.7.5's fixes were run on a Deck against real recordings this time.
+  A 60 fps 800p clip sent with 30 fps and 480p chosen arrives as H.264,
+  768x480, 30 fps; with 800p chosen it arrives at 800p and 30 fps; with
+  60 fps chosen it is sent untouched. A 30 fps recording is left alone
+  unless a smaller frame is asked for. The x264 fallback was forced once
+  and produced the same file.
+  이번에는 v0.7.5의 수정을 덱에서 실제 녹화로 확인했습니다. 60fps 800p
+  클립을 30fps·480p로 보내면 H.264 768x480 30fps로 도착하고, 800p를
+  고르면 800p 30fps로, 60fps를 고르면 손대지 않고 그대로 보냅니다. 30fps
+  녹화는 더 작은 화면을 고르지 않는 한 그대로 둡니다. x264 폴백도 한 번
+  강제로 태워 같은 파일이 나오는 것을 확인했습니다.
+
 ## v0.7.5
 
 ### Changed / 변경

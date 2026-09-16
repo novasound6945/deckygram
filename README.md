@@ -39,7 +39,7 @@
 | ⚡ **Instant** | A screenshot reaches your phone seconds after you press the button — inotify, not polling. |
 | 🎮 **Game-aware captions** | Every photo arrives titled with the game's name — Steam games, non-Steam shortcuts (emulators!), even uninstalled ones. |
 | 🎬 **Clips without exporting** | Steam's recorded clips are picked up automatically and remuxed losslessly — no manual export step. |
-| 🪶 **Light on your game** | Video is compressed on the Deck's hardware H.264 encoder, so the CPU - and the power budget it shares with the GPU - stays with the game. Temp files stay off the RAM-backed `/tmp`. |
+| 🪶 **Light on your game** | Video is decoded and encoded on the Deck's hardware video block, so the CPU - and the power budget it shares with the GPU - stays with the game. Temp files stay off the RAM-backed `/tmp`. |
 | 🔒 **No cloud, no account** | Media goes straight from your Deck to **your own** Telegram bot. Nothing in between. |
 | 💬 **Discord too** | Prefer sharing in a Discord channel? Pick it in the wizard and paste a webhook URL — no bot to create. |
 | 🖼️ **Pick from the gallery** | A full-screen picker for everything already on the Deck — including anything from before you installed it. Filter by kind or game, select, press X. |
@@ -172,7 +172,7 @@ nowhere near the limit.</sub>
 | ⚡ **즉시 전송** | 스크린샷 버튼을 누르면 몇 초 안에 폰에 도착합니다 — 폴링이 아니라 inotify 감시. |
 | 🎮 **게임 이름 캡션** | 모든 사진에 게임 이름이 붙어서 옵니다 — 스팀 게임, 비스팀 바로가기(에뮬레이터!), 지운 게임까지. |
 | 🎬 **클립 내보내기 불필요** | 스팀 녹화 클립을 자동으로 감지해 무손실로 변환·전송합니다. 수동 내보내기 없음. |
-| 🪶 **게임에 부담 없음** | 영상은 덱의 하드웨어 H.264 인코더로 압축해, CPU와 GPU가 나눠 쓰는 전력 예산을 게임에 남겨 둡니다. 임시 파일도 램(/tmp)이 아닌 디스크에. |
+| 🪶 **게임에 부담 없음** | 영상은 덱의 하드웨어 비디오 블록에서 디코딩과 인코딩을 모두 처리해, CPU와 GPU가 나눠 쓰는 전력 예산을 게임에 남겨 둡니다. 임시 파일도 램(/tmp)이 아닌 디스크에. |
 | 🔒 **클라우드·계정 없음** | 미디어는 덱에서 **내 소유의** 텔레그램 봇으로 직행합니다. 중간에 아무것도 없습니다. |
 | 💬 **디스코드도 지원** | 디스코드 채널에서 공유하시나요? 마법사에서 고르고 웹훅 URL만 붙여넣으면 됩니다 — 봇 만들 필요 없습니다. |
 | 🖼️ **갤러리에서 골라 보내기** | 기기에 있는 모든 미디어를 전체 화면으로 — 설치 전에 찍은 것도 포함. 종류·게임으로 걸러 고르고 X 버튼으로 전송. |
